@@ -1,0 +1,17 @@
+# Enterprise Smart Intersection Vehicle Counting System
+# Core Dependencies
+
+# UI Framework
+PySide6>=6.6.0
+
+# AI Inference
+onnxruntime-gpu>=1.16.0
+# Note: If GPU is not available, use onnxruntime instead:
+# onnxruntime>=1.16.0
+
+# Computer Vision & Image Processing
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Object Tracking & Annotation
+supervision>=0.18.0
