@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.video_source_manager import VideoInfo
-from ui.themes import ThemeColors, Typography, Spacing, CardStyles, LabelStyles
+from ui.themes import ThemeColors, Typography, Spacing, CardStyles, LabelStyles, MiscStyles, StatusBarStyles
 
 
 class VideoInfoDisplay(QWidget):
@@ -65,13 +65,13 @@ class VideoInfoDisplay(QWidget):
 
         # اسم المصدر
         self._lbl_source_name = QLabel("المصدر: --")
-        self._lbl_source_name.setStyleSheet("font-size: 14px; font-weight: bold; color: #4CAF50;")
+        self._lbl_source_name.setStyleSheet(StatusBarStyles.info_source_name())
         info_layout.addWidget(self._lbl_source_name)
 
         # خط فاصل
         line1 = QFrame()
         line1.setFrameShape(QFrame.Shape.HLine)
-        line1.setStyleSheet("background-color: #444;")
+        line1.setStyleSheet(MiscStyles.info_separator())
         info_layout.addWidget(line1)
 
         # صف المعلومات الأول
@@ -116,7 +116,7 @@ class VideoInfoDisplay(QWidget):
         progress_layout = QVBoxLayout()
         
         self._lbl_status = QLabel("جاهز للتحميل")
-        self._lbl_status.setStyleSheet("font-size: 12px; color: #888;")
+        self._lbl_status.setStyleSheet(StatusBarStyles.info_status_text())
         progress_layout.addWidget(self._lbl_status)
 
         self._progress_bar = QProgressBar()
@@ -212,12 +212,12 @@ class VideoInfoDisplay(QWidget):
             return
         if not video_info.is_valid:
             self.lbl_source_name.setText(f"X خطأ: {video_info.error_message}")
-            self.lbl_source_name.setStyleSheet("font-size: 14px; font-weight: bold; color: #f44336;")
+            self.lbl_source_name.setStyleSheet(StatusBarStyles.info_source_error())
             return
 
         # تحديث المعلومات
         self.lbl_source_name.setText(f"OK {video_info.file_name}")
-        self.lbl_source_name.setStyleSheet("font-size: 14px; font-weight: bold; color: #4CAF50;")
+        self.lbl_source_name.setStyleSheet(StatusBarStyles.info_source_name())
 
         self.lbl_source_type.setText(f"النوع: {video_info.source_type}")
         self.lbl_resolution.setText(f"الدقة: {video_info.get_resolution_text()}")

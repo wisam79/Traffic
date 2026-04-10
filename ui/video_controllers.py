@@ -60,27 +60,18 @@ class ImageAdjuster:
         self.is_active = False
 
     def adjust(self, frame: np.ndarray) -> np.ndarray:
-        """
-        تطبيق التعديلات على الإطار
-
-        المُعاملات (Args):
-            frame: الإطار الأصلي
-
-        المرجع (Returns):
-            إطار مُعدل
-        """
         if not self.is_active:
             return frame
 
-        adjusted = frame.copy()
+        if self.brightness == 0 and self.contrast == 1.0 and self.saturation == 1.0:
+            self.is_active = False
+            return frame
 
-        # تطبيق السطوع والتباين معاً ( لتجنب التراكم )
+        adjusted = frame
+
         if self.brightness != 0 or self.contrast != 1.0:
-            alpha = self.contrast
-            beta = self.brightness
-            adjusted = cv2.convertScaleAbs(adjusted, alpha=alpha, beta=beta)
+            adjusted = cv2.convertScaleAbs(adjusted, alpha=self.contrast, beta=self.brightness)
 
-        # تطبيق التشبع
         if self.saturation != 1.0:
             hsv = cv2.cvtColor(adjusted, cv2.COLOR_BGR2HSV)
             h, s, v = cv2.split(hsv)

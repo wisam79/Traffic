@@ -23,8 +23,7 @@ from typing import Tuple, Callable, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame
 )
-from PySide6.QtCore import Qt, QEvent, QObject
-from PySide6.QtGui import QImage
+from PySide6.QtCore import Qt, QEvent, QObject, QTimer
 
 from ui.video_player import ZoomableGraphicsView, VideoDisplayManager
 from ui.video_controllers import VideoController
@@ -40,7 +39,7 @@ from ui.styles import (
     COORDS_STYLE
 )
 from ui.themes import (
-    ButtonStyles, Spacing, Typography, ThemeColors, MiscStyles
+    ButtonStyles, Spacing, Typography, ThemeColors, MiscStyles, StatusBarStyles
 )
 
 logger = logging.getLogger(__name__)
@@ -114,6 +113,9 @@ class VideoPanel(QWidget):
         self._mouse_filter = None
         self._line_callback = None
         self._sent_line_coords: dict = {}
+        self._toast_timer = QTimer()
+        self._toast_timer.setSingleShot(True)
+        self._toast_timer.timeout.connect(self._hide_toast)
 
         self._setup_ui()
 
@@ -184,15 +186,15 @@ class VideoPanel(QWidget):
         layout.addWidget(self.lbl_status_indicator)
 
         sep1 = QLabel("|")
-        sep1.setStyleSheet(f"color: {ThemeColors.BORDER_DARK}; font-size: {Typography.SIZE_BASE}px;")
+        sep1.setStyleSheet(MiscStyles.header_separator())
         layout.addWidget(sep1)
 
         self.lbl_fps = QLabel("FPS: --")
-        self.lbl_fps.setStyleSheet(f"color: {ThemeColors.SUCCESS}; font-size: {Typography.SIZE_SM}px; font-weight: bold; font-family: {Typography.FONT_FAMILY_MONO};")
+        self.lbl_fps.setStyleSheet(MiscStyles.fps_label())
         layout.addWidget(self.lbl_fps)
 
         sep2 = QLabel("|")
-        sep2.setStyleSheet(f"color: {ThemeColors.BORDER_DARK}; font-size: {Typography.SIZE_BASE}px;")
+        sep2.setStyleSheet(MiscStyles.header_separator())
         layout.addWidget(sep2)
 
         self.btn_zoom_in = QPushButton("➕")
@@ -214,7 +216,7 @@ class VideoPanel(QWidget):
         layout.addWidget(self.btn_reset_view)
 
         sep3 = QLabel("|")
-        sep3.setStyleSheet(f"color: {ThemeColors.BORDER_DARK}; font-size: {Typography.SIZE_BASE}px;")
+        sep3.setStyleSheet(MiscStyles.header_separator())
         layout.addWidget(sep3)
 
         self.btn_manage_lines = QPushButton("📏 الخطوط")
@@ -323,41 +325,38 @@ class VideoPanel(QWidget):
         self.video_controller.adjuster.reset()
 
     def on_screenshot(self) -> int:
-        bgr_frame = self._get_current_frame_as_bgr()
+        bgr_frame = self.video_manager.last_bgr_frame if self.video_manager else None
         if bgr_frame is not None:
             filepath = self.video_controller.recorder.take_screenshot(bgr_frame)
             count = self.video_controller.recorder.total_screenshots
+            self._show_toast("📷 تم التقاط الصورة")
             logger.info(f"تم التقاط صورة: {filepath}")
             return count
         return 0
 
     def on_record(self) -> bool:
         if not self.video_controller.recorder.is_recording:
-            if self.video_manager.pixmap_item:
-                bgr_frame = self._get_current_frame_as_bgr()
-                if bgr_frame is not None:
-                    success = self.video_controller.recorder.start_recording(bgr_frame)
-                    return success
+            bgr_frame = self.video_manager.last_bgr_frame if self.video_manager else None
+            if bgr_frame is not None:
+                success = self.video_controller.recorder.start_recording(bgr_frame)
+                if success:
+                    self._show_toast("⏺ بدء التسجيل")
+                return success
         else:
             self.video_controller.recorder.stop_recording()
+            self._show_toast("⏹ تم إيقاف التسجيل")
             return True
         return False
 
-    def _get_current_frame_as_bgr(self):
-        if not self.video_manager.pixmap_item:
-            return None
-
-        pixmap = self.video_manager.pixmap_item.pixmap()
-        q_image = pixmap.toImage().convertToFormat(
-            QImage.Format.Format_ARGB32
+    def _show_toast(self, message: str, duration_ms: int = 2000) -> None:
+        self.lbl_instruction.setText(message)
+        self.lbl_instruction.setStyleSheet(
+            f"color: {ThemeColors.SUCCESS}; font-size: {Typography.SIZE_SM}px; font-weight: bold;"
         )
-        width = q_image.width()
-        height = q_image.height()
-        bytes_per_line = q_image.bytesPerLine()
-        ptr = q_image.bits()
-        ptr.setsize(bytes_per_line * height)
-        arr = np.array(ptr).reshape(height, bytes_per_line // 4, 4)
-        # اقتصاص الأعمدة الزائدة (padding) إن وجدت
-        arr = arr[:, :width, :]
-        # ARGB32 ترتيب البايتات: B, G, R, A (little-endian)
-        return cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
+        self._toast_timer.start(duration_ms)
+
+    def _hide_toast(self) -> None:
+        self.lbl_instruction.setText("💡 انقر مرتين على الفيديو لرسم خط العد")
+        self.lbl_instruction.setStyleSheet(INSTRUCTION_DEFAULT_STYLE)
+
+

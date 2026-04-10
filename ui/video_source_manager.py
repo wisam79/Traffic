@@ -22,6 +22,8 @@ from typing import Optional, Dict, List, Tuple
 from datetime import timedelta
 from pathlib import Path
 
+from PySide6.QtCore import QSettings
+
 logger = logging.getLogger(__name__)
 
 
@@ -123,16 +125,10 @@ class VideoSourceManager:
     """
 
     def __init__(self, max_recent_files: int = 10):
-        """
-        تهيئة المدير
-
-        المُعاملات (Args):
-            max_recent_files: عدد الملفات الأخيرة للحفظ
-        """
         self.max_recent_files = max_recent_files
-        self.recent_files: List[str] = []
+        self._settings = QSettings("SmartTraffic", "TrafficCounter")
+        self.recent_files: List[str] = self._settings.value("recent_files", [], type=list)
 
-        # الصيغ المدعومة
         self.supported_video_extensions = {
             '.mp4', '.avi', '.mkv', '.mov', '.wmv', 
             '.flv', '.webm', '.m4v', '.mpeg', '.mpg'
@@ -400,19 +396,17 @@ class VideoSourceManager:
     # ======================================================================
 
     def _add_to_recent_files(self, file_path: str) -> None:
-        """إضافة ملف للقائمة الأخيرة."""
         file_path = os.path.abspath(file_path)
         
-        # إزالة إذا موجود مسبقاً
         if file_path in self.recent_files:
             self.recent_files.remove(file_path)
         
-        # إضافة في البداية
         self.recent_files.insert(0, file_path)
         
-        # تحديد الحجم الأقصى
         if len(self.recent_files) > self.max_recent_files:
             self.recent_files = self.recent_files[:self.max_recent_files]
+
+        self._persist_recent_files()
 
     def get_recent_files(self) -> List[str]:
         """الحصول على قائمة الملفات الأخيرة."""
@@ -425,10 +419,13 @@ class VideoSourceManager:
         return valid_files
 
     def clear_recent_files(self) -> None:
-        """مسح قائمة الملفات الأخيرة."""
         self.recent_files.clear()
+        self._persist_recent_files()
 
     def remove_from_recent(self, file_path: str) -> None:
-        """حذف ملف من القائمة الأخيرة."""
         if file_path in self.recent_files:
             self.recent_files.remove(file_path)
+            self._persist_recent_files()
+
+    def _persist_recent_files(self) -> None:
+        self._settings.setValue("recent_files", self.recent_files)

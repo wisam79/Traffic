@@ -99,8 +99,10 @@ class AIEngineThread(QThread):
         # عداد الأخطاء المتتالية
         self._consecutive_errors = 0
 
-        # مدير خط العد
         self.line_zone_manager = LineZoneManager()
+
+        self._stats_emit_interval = 5
+        self._frame_counter = 0
 
         # ======================================================================
         # أدوات الرسم من supervision
@@ -156,7 +158,9 @@ class AIEngineThread(QThread):
                     annotated_frame, stats = self._process_frame(frame)
                     self._consecutive_errors = 0
                     self.frame_ready.emit(annotated_frame)
-                    self.stats_ready.emit(stats)
+                    self._frame_counter += 1
+                    if self._frame_counter % self._stats_emit_interval == 0:
+                        self.stats_ready.emit(stats)
                 except Exception as e:
                     self._consecutive_errors += 1
                     logger.error(f"خطأ معالجة الإطار ({self._consecutive_errors}): {e}")
@@ -220,27 +224,14 @@ class AIEngineThread(QThread):
         all_detections: sv.Detections,
         vehicle_detections: sv.Detections
     ) -> np.ndarray:
-        """
-        رسم الصناديق والخط على الإطار
+        annotated = frame
 
-        المُعاملات (Args):
-            frame: الإطار الأصلي
-            all_detections: جميع الكشوفات
-            vehicle_detections: كشوفات المركبات فقط
-
-        المرجع (Returns):
-            إطار مُرسوم عليه الصناديق والخط
-        """
-        annotated = frame.copy()
-
-        # رسم خط العد إذا موجود
         for line_zone in self.line_zone_manager.line_zones.values():
             annotated = self.line_annotator.annotate(
                 frame=annotated,
                 line_counter=line_zone
             )
 
-        # رسم صناديق المركبات
         if len(vehicle_detections) > 0:
             labels = self.tracker.get_labels(vehicle_detections)
 

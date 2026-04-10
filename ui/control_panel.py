@@ -26,7 +26,7 @@ from ui.styles import (
 )
 from ui.themes import (
     InputStyles, ListStyles, Spacing, Typography,
-    ThemeColors, StatCardStyles, MiscStyles, ButtonStyles
+    ThemeColors, StatCardStyles, MiscStyles, ButtonStyles, StatusBarStyles
 )
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ class ControlPanel(QWidget):
 
         lbl = QLabel(label_text)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(f"color: {ThemeColors.TEXT_MUTED}; font-size: {Typography.SIZE_XS}px; font-weight: bold;")
+        lbl.setStyleSheet(StatusBarStyles.card_label())
         cl.addWidget(lbl)
 
         val = QLabel(value_text)

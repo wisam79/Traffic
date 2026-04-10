@@ -44,7 +44,7 @@ from ui.styles import (
     STATUS_LINE_SET_STYLE, STATUS_LINE_UNSET_STYLE,
     INSTRUCTION_SUCCESS_STYLE, INSTRUCTION_DEFAULT_STYLE
 )
-from ui.themes import Spacing
+from ui.themes import Spacing, StatusBarStyles
 from ui.video_source_manager import VideoSourceManager, VideoInfo
 from engine.ai_thread import AIEngineThread
 from video.ingestor import VideoIngestor
@@ -618,7 +618,7 @@ class MainWindow(QMainWindow):
             if self._is_streaming and self._last_frame_time > 0:
                 if time.time() - self._last_frame_time > 5:
                     self.video_panel.lbl_status_indicator.setText("⚠️ انقطع البث")
-                    self.video_panel.lbl_status_indicator.setStyleSheet("color: #FF9800; font-size: 12px; font-weight: bold;")
+                    self.video_panel.lbl_status_indicator.setStyleSheet(StatusBarStyles.stream_disconnected())
 
     # ======================================================================
     # إدارة مصادر الفيديو

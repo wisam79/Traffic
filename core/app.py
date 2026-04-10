@@ -21,6 +21,7 @@ from PySide6.QtGui import QFont
 
 from core.config import LOG_LEVEL, LOG_FORMAT, APP_FONT_NAME, APP_FONT_SIZE
 from ui.main_window import MainWindow
+from ui.themes import ThemeColors
 
 logger = logging.getLogger(__name__)
 
@@ -71,36 +72,46 @@ def create_application() -> QApplication:
 
 
 def run() -> int:
-    """
-    تشغيل التطبيق
-    ===============
-    الدالة الرئيسية التي تُشغل كل شيء.
-
-    الخطوات:
-    1. إعداد السجلات
-    2. إنشاء QApplication
-    3. إنشاء وعرض MainWindow
-    4. تشغيل حلقة الأحداث
-
-    المرجع (Returns):
-        رمز الخروج (0 = نجاح)
-    """
-    # الخطوة 1: إعداد السجلات
     setup_logging()
 
     logger.info("=== بدء تطبيق نظام عد المركبات الذكي ===")
 
-    # الخطوة 2: إنشاء التطبيق
     app = create_application()
 
-    # الخطوة 3: إنشاء وعرض النافذة الرئيسية
+    splash = None
+    try:
+        from PySide6.QtWidgets import QSplashScreen
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtCore import Qt
+
+        pixmap = QPixmap(400, 200)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        splash = QSplashScreen(pixmap)
+        splash.setStyleSheet(f"""
+            QSplashScreen {{
+                background-color: {ThemeColors.BACKGROUND_DARK};
+                border: 2px solid {ThemeColors.SUCCESS};
+                border-radius: 12px;
+            }}
+        """)
+        splash.showMessage(
+            "جاري تحميل النموذج...\nLoading AI Model...",
+            Qt.AlignmentFlag.AlignCenter,
+            ThemeColors.SUCCESS
+        )
+        splash.show()
+        app.processEvents()
+    except Exception:
+        splash = None
+
     window = MainWindow()
     window.show()
 
+    if splash:
+        splash.finish(window)
+
     logger.info("تم عرض النافذة الرئيسية")
 
-    # الخطوة 4: تشغيل حلقة الأحداث
-    # app.exec() تُسيطر على الخيط حتى إغلاق التطبيق
     exit_code = app.exec()
 
     logger.info("=== انتهى تطبيق نظام عد المركبات الذكي ===")

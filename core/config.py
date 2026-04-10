@@ -73,19 +73,7 @@ APP_FONT_SIZE = 10
 MAIN_WINDOW_WIDTH = 1400
 MAIN_WINDOW_HEIGHT = 900
 
-# ألوان الواجهة
-COLORS = {
-    "background_dark": "#0a0a0a",
-    "panel_dark": "#1a1a1a",
-    "border": "#333",
-    "text_primary": "#ffffff",
-    "text_secondary": "#888888",
-    "accent_green": "#4CAF50",
-    "accent_red": "#f44336",
-    "accent_blue": "#2196F3",
-    "accent_orange": "#FF9800",
-    "accent_cyan": "#00FFFF"
-}
+
 
 # ==============================================================================
 # إعدادات الخط العددي - Line Zone Settings

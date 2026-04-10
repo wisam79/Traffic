@@ -25,6 +25,7 @@ from PySide6.QtCore import Qt
 
 from ui.drawing_modes import DrawingMode, LineData
 from ui.styles import CONTROL_PANEL_STYLE
+from ui.themes import MiscStyles, ThemeColors, Typography
 
 
 class LineManagerWidget(QWidget):
@@ -86,14 +87,14 @@ class LineManagerWidget(QWidget):
 
         self.btn_delete = QPushButton("🗑 حذف المحدد")
         self.btn_delete.setFixedHeight(28)
-        self.btn_delete.setStyleSheet("background-color: #f44336; color: white;")
+        self.btn_delete.setStyleSheet(MiscStyles.delete_button())
         btn_layout.addWidget(self.btn_delete)
 
         layout.addLayout(btn_layout)
 
         self.btn_clear_all = QPushButton("⊗ مسح الكل")
         self.btn_clear_all.setFixedHeight(32)
-        self.btn_clear_all.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold;")
+        self.btn_clear_all.setStyleSheet(MiscStyles.clear_all_button())
         layout.addWidget(self.btn_clear_all)
 
         # ==================================================================
@@ -108,7 +109,7 @@ class LineManagerWidget(QWidget):
 
         # عداد
         self.lbl_line_count = QLabel("عدد الخطوط: 0")
-        self.lbl_line_count.setStyleSheet("font-size: 11px; color: #888;")
+        self.lbl_line_count.setStyleSheet(f"font-size: {Typography.SIZE_SM}px; color: {ThemeColors.TEXT_MUTED};")
         layout.addWidget(self.lbl_line_count)
 
     def update_line_list(self, lines: List[LineData]) -> None:

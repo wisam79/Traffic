@@ -1,224 +1,249 @@
+# Smart Intersection Vehicle Counting System
 # نظام عد المركبات الذكي - تقاطعات المرور
-# Enterprise Smart Intersection Vehicle Counting System
 
-تطبيق سطح مكتب احترافي لكشف وتتبع وعد المركبات في الزمن الحقيقي باستخدام YOLO26n و PySide6.
+Real-time vehicle detection, tracking, and counting at intersections using YOLO26n + ByteTrack + PySide6.
 
-## 📁 هيكل المشروع
+تطبيق سطح مكتب احترافي لكشف وتتبع وعد المركبات في الزمن الحقيقي.
+
+---
+
+## Features | المميزات
+
+- **Real-time Detection**: YOLO26n ONNX model with CUDA/CPU auto-fallback
+- **Multi-line Counting**: Draw multiple counting lines with individual in/out stats
+- **Vehicle Classification**: Cars, motorcycles, buses, trucks (COCO classes)
+- **Video Sources**: Camera, video file, RTSP stream, HTTP stream
+- **Recording**: Video recording and screenshot capture
+- **Image Adjustments**: Brightness, contrast, saturation controls
+- **Dark/Light Theme**: Switchable theme with persistent preference
+- **Session Management**: Save/load sessions with line positions and stats
+- **Data Export**: CSV and JSON export of counting statistics
+- **Keyboard Shortcuts**: Space, Ctrl+O, Ctrl+S, F11, Escape
+
+---
+
+## Project Structure | هيكل المشروع
 
 ```
 traffic/
+├── main.py                          # Entry point | نقطة الدخول
+├── requirements.txt                 # Dependencies | المكتبات
+├── README.md
 │
-├── main.py                          # نقطة الدخول الرئيسية (بسيط جداً)
-├── requirements.txt                 # المكتبات المطلوبة
-├── README.md                        # هذا الملف
-├── .gitignore                       # ملفات Git
+├── core/                            # Core settings | الإعدادات الأساسية
+│   ├── config.py                    # Constants and configuration
+│   └── app.py                       # Application setup with splash screen
 │
-├── core/                            # ═══ الإعدادات الأساسية ═══
-│   ├── __init__.py
-│   ├── config.py                    # جميع الثوابت والإعدادات
-│   └── app.py                       # إعداد التطبيق الرئيسي
+├── engine/                          # AI Engine | محرك الذكاء الاصطناعي
+│   ├── ai_thread.py                 # Main processing thread (QThread)
+│   ├── preprocessor.py              # Frame preprocessing (letterbox)
+│   ├── detector.py                  # Object detection (YOLO26 ONNX)
+│   └── tracker.py                   # Tracking (ByteTrack) + LineZone counting
 │
-├── engine/                          # ═══ محرك الذكاء الاصطناعي ═══
-│   ├── __init__.py
-│   ├── ai_thread.py                 # خيط المعالجة الرئيسي (QThread)
-│   ├── preprocessor.py              # معالجة الإطارات المسبقة
-│   ├── detector.py                  # كشف الكائنات بـ ONNX
-│   └── tracker.py                   # التتبع وخط العد
+├── ui/                              # User Interface | واجهة المستخدم
+│   ├── main_window.py               # Main window (signal wiring)
+│   ├── video_panel.py               # Video display panel
+│   ├── video_player.py              # Zoomable graphics view + display manager
+│   ├── video_toolbar.py             # Right sidebar (image adjust, recording)
+│   ├── video_controllers.py         # Image adjustment + media recorder
+│   ├── video_source_manager.py      # Video source validation + info
+│   ├── video_info_display.py        # Video info card with progress
+│   ├── drawing_modes.py             # Line drawing tools (single/multi)
+│   ├── line_manager.py              # Line management widget
+│   ├── control_panel.py             # Left panel (source, stats, controls)
+│   ├── styles.py                    # CSS style constants
+│   └── themes.py                    # Theme system (dark/light) + design tokens
 │
-├── ui/                              # ═══ واجهة المستخدم ═══
-│   ├── __init__.py
-│   ├── main_window.py               # النافذة الرئيسية
-│   ├── video_panel.py               # لوحة عرض الفيديو
-│   ├── video_player.py              # مشغل الفيديو (تكبير/تحريك)
-│   ├── video_controllers.py         # متحكمات الفيديو والتسجيل
-│   ├── video_source_manager.py      # إدارة مصادر الفيديو
-│   ├── video_info_display.py        # عرض معلومات الفيديو
-│   ├── drawing_modes.py             # أوضاع رسم الخطوط المتقدمة
-│   ├── line_manager.py              # ويدجت إدارة الخطوط
-│   ├── control_panel.py             # لوحة التحكم والإحصائيات
-│   ├── styles.py                    # أنماط CSS متوافقة
-│   └── themes.py                    # نظام الثيمات الاحترافي
+├── video/
+│   └── ingestor.py                  # Video capture with FPS pacing + RTSP reconnect
 │
-├── video/                           # ═══ معالجة الفيديو ═══
-│   ├── __init__.py
-│   └── ingestor.py                  # التقاط الفيديو
-│
-├── state/                           # ═══ إدارة الحالة ═══
-│   ├── __init__.py
-│   └── app_state.py                 # الحالة المشتركة الآمنة
+├── state/
+│   └── app_state.py                 # Thread-safe shared state
 │
 ├── models/
-│   └── yolo26n.onnx                 # نموذج YOLO للكشف
+│   └── yolo26n.onnx                 # YOLO26 detection model
 │
-├── docs/                            # ═══ التوثيق ═══
-│   ├── improvement_plan.md          # خطة التحسين
-│   └── line_drawing_guide.md        # دليل رسم الخطوط
+├── docs/
+│   ├── architecture.md              # System architecture
+│   ├── configuration.md             # Configuration guide
+│   ├── development.md               # Development guide
+│   ├── line_drawing_guide.md         # Line drawing user guide
+│   └── improvement_plan.md           # Improvement plan
 │
-├── tests/                           # ═══ الاختبارات ═══
-│   ├── conftest.py                  # إعدادات الاختبارات المشتركة
-│   ├── test_detector.py             # اختبارات الكاشف
-│   ├── test_preprocessor.py          # اختبارات المعالج المسبق
-│   ├── test_tracker.py              # اختبارات المتتبع
-│   ├── test_drawing_modes.py        # اختبارات أدوات الرسم
-│   ├── test_video_controllers.py    # اختبارات متحكمات الفيديو
-│   ├── test_pipeline_integration.py # اختبارات التكامل
-│   └── test_user_journey.py         # اختبار رحلة المستخدم
+├── tests/
+│   ├── conftest.py                  # Shared fixtures
+│   ├── test_detector.py
+│   ├── test_preprocessor.py
+│   ├── test_tracker.py
+│   ├── test_drawing_modes.py
+│   ├── test_video_controllers.py
+│   ├── test_pipeline_integration.py
+│   └── test_user_journey.py
 │
-└── recordings/                      # ═══ التسجيلات ═══
-    └── (ملفات التسجيل والصور الملتقطة)
+└── recordings/                      # Saved recordings and screenshots
 ```
 
-## 🎯 مميزات المشروع المُعاد هيكلة
+---
 
-### ✓ فصل المسؤوليات
-- **core/**: إعدادات عامة فقط
-- **engine/**: معالجة الذكاء الاصطناعي فقط
-- **ui/**: واجهة المستخدم فقط
-- **video/**: التقاط الفيديو فقط
-- **state/**: إدارة الحالة فقط
-
-### ✓ تعليقات عربية تفصيلية
-- كل دالة موثقة بالعربية والإنجليزية
-- شرح المعاملات والمراجع
-- توضيح العلاقات بين المكونات
-
-### ✓ سهولة التعديل
-- تعديل الإعدادات في `core/config.py` فقط
-- كل مكون مستقل قابل للاستبدال
-- اختبار فردي سهل
-
-## 🚀 الاستخدام
-
-### التثبيت
+## Installation | التثبيت
 
 ```bash
+# Clone the repository
+git clone https://github.com/wisam79/Traffic.git
+cd Traffic
+
+# Install dependencies
 pip install -r requirements.txt
+
+# For GPU acceleration (optional)
+pip install onnxruntime-gpu
 ```
 
-### التشغيل
+### Requirements
+
+| Package | Purpose |
+|---------|---------|
+| PySide6 | GUI framework |
+| onnxruntime | ONNX model inference |
+| opencv-python | Video capture & image processing |
+| numpy | Array operations |
+| supervision | Detection/tracking/annotation utilities |
+
+---
+
+## Usage | الاستخدام
 
 ```bash
 python main.py
 ```
 
-### كيفية الاستخدام
+### Steps | الخطوات
 
-1. **اختيار مصدر الفيديو**: أدخل رقم الكاميرا أو تصفح لملف فيديو
-2. **بدء البث**: انقر "بدء البث"
-3. **رسم خط العد**: انقر مرتين على الفيديو
-4. **مشاهدة النتائج**: العدادات تتحدث في الزمن الحقيقي
+1. **Select Video Source**: Enter camera number (e.g., `0`) or browse for a video file
+2. **Load Video**: Click the load button to preview the first frame
+3. **Start Analysis**: Click start or press `Space`
+4. **Draw Counting Line**: Click two points on the video to create a counting line
+5. **View Results**: Real-time vehicle counts update in the control panel
+6. **Record/Screenshot**: Use the right toolbar for image adjustments and recording
 
-## 🏗️ البنية التقنية
+### Keyboard Shortcuts
 
-### تدفق البيانات
+| Shortcut | Action |
+|----------|--------|
+| `Space` | Start/Stop analysis |
+| `Ctrl+O` | Open video file |
+| `Ctrl+S` | Take screenshot |
+| `F11` | Toggle fullscreen |
+| `Escape` | Exit fullscreen |
+
+---
+
+## Architecture | البنية التقنية
+
+### Data Flow | تدفق البيانات
 
 ```
-مصدر الفيديو
+Video Source (Camera/File/RTSP)
     ↓
-VideoIngestor (خيط منفصل)
-    ↓ raw_frame_queue
-AIEngineThread (خيط منفصل)
-    ↓ Signals
-MainWindow (خيط الواجهة)
+VideoIngestor (Thread 2: frame capture + FPS pacing)
+    ↓ raw_frame_queue (maxsize=2, drop oldest when full)
+AIEngineThread (Thread 3: preprocess → detect → track → count → annotate)
+    ↓ Qt Signals (frame_ready, stats_ready)
+MainWindow (Thread 1: UI update)
     ↓
-VideoPanel + ControlPanel
+VideoPanel + ControlPanel + VideoToolbar
 ```
 
-### التواصل بين الخيوط
+### Thread Communication | التواصل بين الخيوط
 
-- **VideoIngestor → AIEngine**: عبر `queue.Queue`
-- **AIEngine → UI**: عبر PySide6 `Signal/Slot`
-- **UI → AIEngine**: عبر `Slot` methods
+| From → To | Mechanism |
+|-----------|-----------|
+| VideoIngestor → AIEngine | `queue.Queue` (lock-free, bounded) |
+| AIEngine → UI | PySide6 `Signal/Slot` (thread-safe) |
+| UI → AIEngine | `Slot` methods (thread-safe) |
 
-## 📝 توثيق الملفات الرئيسية
+For full architecture details, see [docs/architecture.md](docs/architecture.md).
 
-### core/config.py
-جميع الإعدادات والثوابت. عدّل هنا لتغيير:
-- عتبات الكشف
-- فئات المركبات
-- إعدادات الواجهة
-- الألوان والأحجام
+---
 
-### engine/ai_thread.py
-خيط المعالجة الرئيسي. يربط جميع مكونات engine:
-1. يسحب إطار من الطابور
-2. يُعالج مسبقاً (preprocessor)
-3. يكشف (detector)
-4. يتتبع (tracker)
-5. يعد (line_zone)
-6. يرسم
-7. يُرسل للواجهة
+## Configuration | التخصيص
 
-### ui/main_window.py
-النافذة الرئيسية. تربط:
-- VideoPanel (الفيديو)
-- ControlPanel (التحكم)
-- AIEngine (المعالجة)
+All settings are in `core/config.py`. For detailed configuration, see [docs/configuration.md](docs/configuration.md).
 
-### state/app_state.py
-إدارة الحالة المشتركة الآمنة:
-- إحداثيات الخط
-- حالة البث
-- الإحصائيات
+### Key Settings
 
-## 🔧 التخصيص
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CONFIDENCE_THRESHOLD` | 0.5 | Minimum detection confidence |
+| `IOU_THRESHOLD` | 0.45 | NMS IoU threshold |
+| `MODEL_INPUT_SIZE` | (640, 640) | Model input resolution |
+| `MAX_QUEUE_SIZE` | 2 | Frame queue size |
+| `TRACKER_FRAME_RATE` | 30 | ByteTrack FPS setting |
 
-### إضافة فئة مركبة جديدة
+### Adding Vehicle Classes
 
-عدل `core/config.py`:
+Edit `core/config.py`:
 ```python
 VEHICLE_CLASSES = {
     2: "car",
     3: "motorcycle",
     5: "bus",
     7: "truck",
-    9: "new_vehicle"  # أضف هنا
+    # Add new classes here using COCO class IDs
 }
 ```
-
-### تغيير عتبة الثقة
-
-عدل `core/config.py`:
-```python
-CONFIDENCE_THRESHOLD = 0.6  # من 0.5 إلى 0.6
-```
-
-### تغيير الألوان
-
-عدل `core/config.py`:
-```python
-COLORS = {
-    "accent_green": "#4CAF50",
-    # عدّل الألوان هنا
-}
-```
-
-## 📊 الأداء
-
-- **GPU**: CUDA متاح → أداء عالي
-- **CPU**: بديل تلقائي إذا لم يتوفر GPU
-- **FPS**: يعتمد على الجهاز، عادةً 15-30 FPS
-
-## 🐛 حل المشاكل
-
-### "Model not found"
-تأكد من وجود `models/yolo26n.onnx`
-
-### "Failed to start video"
-- تحقق من مصدر الفيديو
-- تأكد من وجود الكاميرا أو الملف
-
-### بطء الأداء
-- ثبّت `onnxruntime-gpu` بدلاً من `onnxruntime`
-- قلل حجم الفيديو
-- زد عتبة الثقة
-
-## 📞 الدعم
-
-لأي مشاكل أو استفسارات، راجع التعليقات في الكود أو افتح issue.
 
 ---
 
-**الإصدار**: 2.0  
-**التاريخ**: ٢٠٢٦  
-**التقنيات**: PySide6, ONNX, OpenCV, Supervision
+## Performance | الأداء
+
+| Mode | Typical FPS | Notes |
+|------|-------------|-------|
+| GPU (CUDA) | 25-35+ | Requires `onnxruntime-gpu` |
+| CPU | 10-20 | Default, works on any machine |
+
+### Performance Tips
+
+- Use `onnxruntime-gpu` for CUDA acceleration
+- Lower video resolution reduces processing time
+- Increase `CONFIDENCE_THRESHOLD` to reduce false positives
+- Stats emission is throttled to every 5th frame to reduce UI overhead
+
+---
+
+## Troubleshooting | حل المشاكل
+
+| Problem | Solution |
+|---------|----------|
+| "Model not found" | Ensure `models/yolo26n.onnx` exists |
+| "Failed to start video" | Check video source path or camera index |
+| Slow performance | Install `onnxruntime-gpu`, lower resolution, increase confidence threshold |
+| RTSP disconnects | Auto-reconnects up to 3 times (2s delay between attempts) |
+
+---
+
+## Testing | الاختبارات
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test module
+python -m pytest tests/test_detector.py -v
+```
+
+114 tests covering: detector, preprocessor, tracker, drawing modes, video controllers, pipeline integration, and user journey.
+
+For development setup, see [docs/development.md](docs/development.md).
+
+---
+
+## License
+
+This project is licensed under the MIT License.
+
+---
+
+**Version**: 2.1  
+**Date**: 2026  
+**Technologies**: PySide6, ONNX Runtime, OpenCV, Supervision, ByteTrack

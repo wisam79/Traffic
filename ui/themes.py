@@ -4,15 +4,18 @@
 نظام تصميم احترافي للتطبيق بالكامل.
 
 المسؤوليات:
-- نظام ألوان متسق
+- نظام ألوان متسق (داكن وفاتح)
 - أنماط الأزرار مع تأثيرات
 - أنماط البطاقات والمجموعات
 - أنظمة الخطوط والطباعة
 - تأثيرات الحركة والانتقالات
+- مدير ثيمات للتبديل بين الداكن والفاتح
 
 المرتبط به:
 - يُستخدم من: جميع مكونات الواجهة
 """
+
+from PySide6.QtCore import QSettings
 
 
 # ==============================================================================
@@ -686,3 +689,207 @@ class MiscStyles:
                 border: 1px solid {ThemeColors.BORDER_MEDIUM};
             }}
         """
+
+    @staticmethod
+    def delete_button():
+        return f"""
+            QPushButton {{
+                background-color: {ThemeColors.ERROR};
+                color: {ThemeColors.TEXT_PRIMARY};
+                border: none;
+                border-radius: 4px;
+                padding: {Spacing.XS}px {Spacing.SM}px;
+                font-size: {Typography.SIZE_SM}px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {ThemeColors.ERROR_LIGHT};
+            }}
+            QPushButton:pressed {{
+                background-color: {ThemeColors.ERROR_DARK};
+            }}
+        """
+
+    @staticmethod
+    def clear_all_button():
+        return f"""
+            QPushButton {{
+                background-color: {ThemeColors.WARNING};
+                color: {ThemeColors.TEXT_PRIMARY};
+                border: none;
+                border-radius: 4px;
+                padding: {Spacing.XS}px {Spacing.SM}px;
+                font-size: {Typography.SIZE_BASE}px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {ThemeColors.WARNING_LIGHT};
+            }}
+            QPushButton:pressed {{
+                background-color: {ThemeColors.WARNING_DARK};
+            }}
+        """
+
+    @staticmethod
+    def header_separator():
+        return f"color: {ThemeColors.BORDER_DARK}; font-size: {Typography.SIZE_BASE}px;"
+
+    @staticmethod
+    def fps_label():
+        return f"color: {ThemeColors.SUCCESS}; font-size: {Typography.SIZE_SM}px; font-weight: bold; font-family: {Typography.FONT_FAMILY_MONO};"
+
+    @staticmethod
+    def info_separator():
+        return f"background-color: {ThemeColors.BORDER_MEDIUM};"
+
+
+class StatusBarStyles:
+    """
+    أنماط شريط الحالة
+    ==================
+    """
+
+    @staticmethod
+    def stream_disconnected():
+        return f"color: {ThemeColors.WARNING}; font-size: {Typography.SIZE_BASE}px; font-weight: bold;"
+
+    @staticmethod
+    def info_source_name():
+        return f"font-size: {Typography.SIZE_XL}px; font-weight: bold; color: {ThemeColors.SUCCESS};"
+
+    @staticmethod
+    def info_source_error():
+        return f"font-size: {Typography.SIZE_XL}px; font-weight: bold; color: {ThemeColors.ERROR};"
+
+    @staticmethod
+    def info_status_text():
+        return f"font-size: {Typography.SIZE_SM}px; color: {ThemeColors.TEXT_MUTED};"
+
+    @staticmethod
+    def card_label():
+        return f"color: {ThemeColors.TEXT_MUTED}; font-size: {Typography.SIZE_XS}px; font-weight: bold;"
+
+
+# ==============================================================================
+# ألوان الثيم الفاتح
+# ==============================================================================
+
+class LightThemeColors:
+    """
+    نظام الألوان الفاتح
+    ====================
+    ألوان متناسقة للتصميم الفاتح.
+    """
+
+    BACKGROUND_DARKEST = "#f5f5f5"
+    BACKGROUND_DARK = "#ffffff"
+    BACKGROUND_MEDIUM = "#e8e8e8"
+    BACKGROUND_LIGHT = "#d5d5d5"
+
+    BORDER_DARK = "#c0c0c0"
+    BORDER_MEDIUM = "#b0b0b0"
+    BORDER_LIGHT = "#909090"
+
+    TEXT_PRIMARY = "#1a1a1a"
+    TEXT_SECONDARY = "#555555"
+    TEXT_MUTED = "#888888"
+    TEXT_DISABLED = "#aaaaaa"
+
+    SUCCESS = "#2e7d32"
+    SUCCESS_DARK = "#1b5e20"
+    SUCCESS_LIGHT = "#43a047"
+
+    ERROR = "#c62828"
+    ERROR_DARK = "#b71c1c"
+    ERROR_LIGHT = "#e53935"
+
+    INFO = "#1565c0"
+    INFO_DARK = "#0d47a1"
+    INFO_LIGHT = "#1e88e5"
+
+    WARNING = "#e65100"
+    WARNING_DARK = "#bf360c"
+    WARNING_LIGHT = "#f4511e"
+
+    ACCENT_CYAN = "#00838f"
+    ACCENT_PURPLE = "#6a1b9a"
+    ACCENT_TEAL = "#00695c"
+    ACCENT_PINK = "#ad1457"
+
+    GRADIENT_HEADER = """
+        qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 #fafafa,
+            stop:0.5 #f0f0f0,
+            stop:1 #e8e8e8)
+    """
+
+    GRADIENT_CARD = """
+        qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #ffffff,
+            stop:1 #f5f5f5)
+    """
+
+
+# ==============================================================================
+# مدير الثيمات
+# ==============================================================================
+
+class ThemeManager:
+    """
+    مدير الثيمات
+    ==============
+    يُدير التبديل بين الثيم الداكن والفاتح.
+    يُحفظ تفضيل المستخدم في QSettings.
+    """
+
+    DARK = "dark"
+    LIGHT = "light"
+
+    _current_theme = DARK
+
+    @classmethod
+    def current_theme(cls) -> str:
+        return cls._current_theme
+
+    @classmethod
+    def is_dark(cls) -> bool:
+        return cls._current_theme == cls.DARK
+
+    @classmethod
+    def toggle(cls) -> str:
+        cls._current_theme = cls.LIGHT if cls._current_theme == cls.DARK else cls.DARK
+        cls._save_preference()
+        return cls._current_theme
+
+    @classmethod
+    def set_theme(cls, theme: str) -> None:
+        cls._current_theme = theme
+        cls._save_preference()
+
+    @classmethod
+    def load_preference(cls) -> None:
+        settings = QSettings("SmartTraffic", "TrafficCounter")
+        cls._current_theme = settings.value("theme", cls.DARK, type=str)
+
+    @classmethod
+    def _save_preference(cls) -> None:
+        settings = QSettings("SmartTraffic", "TrafficCounter")
+        settings.setValue("theme", cls._current_theme)
+
+    @classmethod
+    def colors(cls):
+        return ThemeColors if cls._current_theme == cls.DARK else LightThemeColors
+
+    @classmethod
+    def apply_to_app(cls, app) -> None:
+        from ui.styles import MAIN_WINDOW_STYLE
+
+        base_style = MAIN_WINDOW_STYLE
+        if cls._current_theme == cls.LIGHT:
+            c = LightThemeColors
+            base_style = f"""
+                QMainWindow {{
+                    background-color: {c.BACKGROUND_DARKEST};
+                }}
+            """
+        app.setStyleSheet(base_style)
