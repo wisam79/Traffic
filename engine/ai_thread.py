@@ -31,11 +31,12 @@ from PySide6.QtCore import QThread, Signal, Slot
 
 from core.config import (
     VEHICLE_CLASSES, VEHICLE_CLASS_NAMES_AR,
-    LINE_WIDTH
+    LINE_WIDTH, DEFAULT_COUNTING_INTERVAL
 )
 from engine.preprocessor import FramePreprocessor
 from engine.detector import ObjectDetector
 from engine.tracker import VehicleTracker, LineZoneManager
+from engine.interval_counter import IntervalCounter
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,14 @@ class AIEngineThread(QThread):
     # رسالة خطأ
     error_occurred = Signal(str)
 
+    # فترة عد انتهت
+    interval_completed = Signal(object)
+
     def __init__(
         self,
         raw_frame_queue: queue.Queue,
-        vehicle_classes: Dict[int, str] = VEHICLE_CLASSES
+        vehicle_classes: Dict[int, str] = VEHICLE_CLASSES,
+        detector: Optional[ObjectDetector] = None
     ):
         """
         تهيئة خيط الذكاء الاصطناعي
@@ -72,6 +77,7 @@ class AIEngineThread(QThread):
         المُعاملات (Args):
             raw_frame_queue: الطابور المشترك مع VideoIngestor
             vehicle_classes: قاموس فئات المركبات
+            detector: كاشف الكائنات مُعاد استخدامه (أو None لإنشاء واحد جديد)
         """
         super().__init__()
 
@@ -86,12 +92,15 @@ class AIEngineThread(QThread):
         # مُعالج الإطارات المسبق
         self.preprocessor = FramePreprocessor()
 
-        # كاشف الكائنات
-        try:
-            self.detector = ObjectDetector()
-        except Exception as e:
-            logger.error(f"فشل تهيئة الكاشف: {e}")
-            self.detector = None
+        # كاشف الكائنات — إعادة استخدام إذا مُرر
+        if detector is not None:
+            self.detector = detector
+        else:
+            try:
+                self.detector = ObjectDetector()
+            except Exception as e:
+                logger.error(f"فشل تهيئة الكاشف: {e}")
+                self.detector = None
 
         # متتبع المركبات
         self.tracker = VehicleTracker()
@@ -100,6 +109,8 @@ class AIEngineThread(QThread):
         self._consecutive_errors = 0
 
         self.line_zone_manager = LineZoneManager()
+
+        self.interval_counter = IntervalCounter()
 
         self._stats_emit_interval = 5
         self._frame_counter = 0
@@ -137,6 +148,8 @@ class AIEngineThread(QThread):
             self._is_running = True
         logger.info("تم بدء خيط الذكاء الاصطناعي")
 
+        self.interval_counter.start()
+
         try:
             while True:
                 # فحص علم التوقف بأمان
@@ -161,6 +174,11 @@ class AIEngineThread(QThread):
                     self._frame_counter += 1
                     if self._frame_counter % self._stats_emit_interval == 0:
                         self.stats_ready.emit(stats)
+
+                    interval_record = self.interval_counter.check_interval(stats)
+                    if interval_record is not None:
+                        self.line_zone_manager.reset_counts()
+                        self.interval_completed.emit(interval_record)
                 except Exception as e:
                     self._consecutive_errors += 1
                     logger.error(f"خطأ معالجة الإطار ({self._consecutive_errors}): {e}")
@@ -226,7 +244,10 @@ class AIEngineThread(QThread):
     ) -> np.ndarray:
         annotated = frame
 
-        for line_zone in self.line_zone_manager.line_zones.values():
+        with self.line_zone_manager._lock:
+            line_zones_snapshot = list(self.line_zone_manager.line_zones.values())
+
+        for line_zone in line_zones_snapshot:
             annotated = self.line_annotator.annotate(
                 frame=annotated,
                 line_counter=line_zone
@@ -284,7 +305,10 @@ class AIEngineThread(QThread):
             self.line_zone_manager.remove_line(line_id)
         else:
             point_a, point_b = coords
-            self.line_zone_manager.set_line(line_id, point_a, point_b)
+            if point_a is None or point_b is None:
+                self.line_zone_manager.remove_line(line_id)
+            else:
+                self.line_zone_manager.set_line(line_id, point_a, point_b)
 
     def reset_counts(self) -> None:
         """
@@ -294,6 +318,17 @@ class AIEngineThread(QThread):
         """
         self.line_zone_manager.reset_counts()
 
+    def set_counting_interval(self, seconds: int) -> None:
+        """
+        تعيين فترة العد بالثواني
+        ==========================
+        0 = كامل المدة (بدون تقسيم)
+        """
+        self.interval_counter.set_interval(seconds)
+
+    def get_interval_counter(self) -> IntervalCounter:
+        return self.interval_counter
+
     def stop_processing(self) -> None:
         """
         إشارة للتوقف عن المعالجة (thread-safe)
@@ -301,3 +336,4 @@ class AIEngineThread(QThread):
         """
         with self._lock:
             self._is_running = False
+        self.interval_counter.stop()

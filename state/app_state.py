@@ -37,8 +37,8 @@ class AppState:
         # القفل الرئيسي - يضمن الوصول الآمن من خيط واحد فقط في كل مرة
         self._lock = threading.Lock()
 
-        # إحداثيات خط العد: ((x1, y1), (x2, y2)) أو None
-        self._line_coordinates: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
+        # إحداثيات خطوط العد: {line_id: ((x1, y1), (x2, y2))} أو فارغ
+        self._line_coordinates: Dict[Any, Tuple[Tuple[int, int], Tuple[int, int]]] = {}
 
         # مصدر الفيديو: مسار ملف، رابط RTSP، أو رقم كاميرا
         self._video_source: str = ""
@@ -57,35 +57,57 @@ class AppState:
     # دوال إحداثيات الخط - Line Coordinates Methods
     # ==========================================================================
 
-    def get_line_coordinates(self) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+    def get_line_coordinates(self) -> Dict[Any, Tuple[Tuple[int, int], Tuple[int, int]]]:
         """
-        الحصول على إحداثيات خط العد الحالية
+        الحصول على إحداثيات جميع خطوط العد
 
         المرجع (Returns):
-            Tuple من نقطتين أو None إذا لم يُحدد خط بعد
+            قاموس من معرف الخط إلى نقطتي البداية والنهاية
         """
         with self._lock:
-            return self._line_coordinates if self._line_coordinates else None
+            return self._line_coordinates.copy() if self._line_coordinates else {}
 
-    def set_line_coordinates(
-        self, coords: Optional[Tuple[Tuple[int, int], Tuple[int, int]]]
-    ) -> None:
+    def get_line_coordinate(self, line_id: Any) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """
-        تعيين إحداثيات خط العد الجديدة
+        الحصول على إحداثيات خط عد محدد
 
         المُعاملات (Args):
+            line_id: معرف الخط
+
+        المرجع (Returns):
+            Tuple من نقطتين أو None إذا لم يُحدد الخط
+        """
+        with self._lock:
+            return self._line_coordinates.get(line_id)
+
+    def set_line_coordinates(
+        self, line_id: Any, coords: Optional[Tuple[Tuple[int, int], Tuple[int, int]]]
+    ) -> None:
+        """
+        تعيين إحداثيات خط عد
+
+        المُعاملات (Args):
+            line_id: معرف الخط
             coords: نقطتي البداية والنهاية، أو None لمسح الخط
         """
         with self._lock:
-            self._line_coordinates = coords
+            if coords is None:
+                self._line_coordinates.pop(line_id, None)
+            else:
+                self._line_coordinates[line_id] = coords
+
+    def remove_line_coordinates(self, line_id: Any) -> None:
+        """
+        إزالة إحداثيات خط عد محدد
+        """
+        self.set_line_coordinates(line_id, None)
 
     def clear_line_coordinates(self) -> None:
         """
-        مسح إحداثيات الخط
-        ------------------
-        اختصار لـ set_line_coordinates(None)
+        مسح جميع إحداثيات الخطوط
         """
-        self.set_line_coordinates(None)
+        with self._lock:
+            self._line_coordinates.clear()
 
     # ==========================================================================
     # دوال مصدر الفيديو - Video Source Methods

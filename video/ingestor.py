@@ -79,12 +79,15 @@ class VideoIngestor:
 
     def read_loop(self) -> None:
         """حلقة القراءة المستمرة للخيط مع تنظيم السرعة (FPS Pacing) للوصول للاختبار الحقيقي."""
-        if not self.stream or self._stop_event.is_set():
+        with self._stream_lock:
+            stream = self.stream
+        if stream is None or self._stop_event.is_set():
             logger.warning("لم يُبدأ البث بعد.")
             return
 
         # حساب تأخير الإطار للتحكم بسرعة القراءة
-        fps = self.stream.get(cv2.CAP_PROP_FPS)
+        with self._stream_lock:
+            fps = self.stream.get(cv2.CAP_PROP_FPS) if self.stream else 30.0
         if fps <= 0 or fps > 120:
             fps = 30.0
         frame_delay = 1.0 / fps
@@ -109,6 +112,7 @@ class VideoIngestor:
                             with self._stream_lock:
                                 if self.stream:
                                     self.stream.release()
+                                    self.stream = None
                             for attempt in range(3):
                                 if self._stop_event.is_set():
                                     break
@@ -146,20 +150,31 @@ class VideoIngestor:
         except Exception as e:
             logger.error(f"خطأ في حلقة القراءة (cv2): {e}")
         finally:
-            self.stop()
+            # تنظيف فقط إذا لم يُستدعَ stop() بالفعل
+            with self._stream_lock:
+                if self.stream is not None:
+                    self.stream.release()
+                    self.stream = None
+            self._stop_event.set()
+            # تنظيف الطابور
+            while not self.raw_frame_queue.empty():
+                try:
+                    self.raw_frame_queue.get_nowait()
+                except queue.Empty:
+                    break
+            logger.info("تم إيقاف فيديو بنجاح.")
 
     def stop(self) -> None:
         """إيقاف التقاط الفيديو"""
         self._stop_event.set()
 
         with self._stream_lock:
-            if self.stream:
-                self.stream.release()
-                self.stream = None
+            if self.stream is None:
+                return
+            self.stream.release()
+            self.stream = None
 
-        # إعطاء خيط القراءة فرصة للتوقف قبل تنظيف الطابور
-        time.sleep(0.15)
-
+        # تنظيف الطابور
         while not self.raw_frame_queue.empty():
             try:
                 self.raw_frame_queue.get_nowait()

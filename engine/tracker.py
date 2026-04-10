@@ -15,6 +15,7 @@
 """
 
 import logging
+import threading
 from typing import Dict, Tuple
 
 import numpy as np
@@ -131,64 +132,77 @@ class LineZoneManager:
         يبدأ بدون خط - يجب استدعاء set_line() لتحديده.
         """
         self.line_zones: Dict[str, sv.LineZone] = {}
+        self._lock = threading.Lock()
 
     def set_line(self, line_id: str, point_a: Tuple[int, int], point_b: Tuple[int, int]) -> None:
-        existing = self.line_zones.get(line_id)
-        if existing is not None:
-            start = existing.vector.start
-            end = existing.vector.end
-            if (start.x, start.y) == point_a and (end.x, end.y) == point_b:
-                return
-        self.line_zones[line_id] = sv.LineZone(
-            start=sv.Point(x=point_a[0], y=point_a[1]),
-            end=sv.Point(x=point_b[0], y=point_b[1]),
-            triggering_anchors=(sv.Position.BOTTOM_CENTER,),
-            minimum_crossing_threshold=3
-        )
-        logger.info(f"تم تعيين خط العد [{line_id}]: {point_a} -> {point_b}")
-
-    def remove_line(self, line_id: str) -> None:
-        if line_id in self.line_zones:
-            del self.line_zones[line_id]
-            logger.info(f"تم إزالة خط العد [{line_id}]")
-
-    def clear_line(self) -> None:
-        self.line_zones.clear()
-        logger.info("تم مسح جميع خطوط العد")
-
-    def update(self, vehicle_detections: sv.Detections) -> None:
-        for line_zone in self.line_zones.values():
-            line_zone.trigger(vehicle_detections)
-
-    def reset_counts(self) -> None:
-        new_zones = {}
-        for line_id, line_zone in self.line_zones.items():
-            start = line_zone.vector.start
-            end = line_zone.vector.end
-            new_zones[line_id] = sv.LineZone(
-                start=start, end=end,
+        if point_a is None or point_b is None:
+            self.remove_line(line_id)
+            return
+        with self._lock:
+            existing = self.line_zones.get(line_id)
+            if existing is not None:
+                start = existing.vector.start
+                end = existing.vector.end
+                if (start.x, start.y) == point_a and (end.x, end.y) == point_b:
+                    return
+            self.line_zones[line_id] = sv.LineZone(
+                start=sv.Point(x=point_a[0], y=point_a[1]),
+                end=sv.Point(x=point_b[0], y=point_b[1]),
                 triggering_anchors=(sv.Position.BOTTOM_CENTER,),
                 minimum_crossing_threshold=3
             )
-        self.line_zones = new_zones
+        logger.info(f"تم تعيين خط العد [{line_id}]: {point_a} -> {point_b}")
+
+    def remove_line(self, line_id: str) -> None:
+        with self._lock:
+            if line_id in self.line_zones:
+                del self.line_zones[line_id]
+                logger.info(f"تم إزالة خط العد [{line_id}]")
+
+    def clear_line(self) -> None:
+        with self._lock:
+            self.line_zones.clear()
+        logger.info("تم مسح جميع خطوط العد")
+
+    def update(self, vehicle_detections: sv.Detections) -> None:
+        with self._lock:
+            line_zones = list(self.line_zones.values())
+        for line_zone in line_zones:
+            line_zone.trigger(vehicle_detections)
+
+    def reset_counts(self) -> None:
+        with self._lock:
+            new_zones = {}
+            for line_id, line_zone in self.line_zones.items():
+                start = line_zone.vector.start
+                end = line_zone.vector.end
+                new_zones[line_id] = sv.LineZone(
+                    start=start, end=end,
+                    triggering_anchors=(sv.Position.BOTTOM_CENTER,),
+                    minimum_crossing_threshold=3
+                )
+            self.line_zones = new_zones
         logger.info("تم إعادة تعيين عدادات خطوط العد")
 
     def get_counts(self, vehicle_classes: Dict[int, str] = None) -> Dict[str, int]:
-        if not self.line_zones:
+        with self._lock:
+            line_zones_snapshot = list(self.line_zones.values())
+
+        if not line_zones_snapshot:
             result = {"in_count": 0, "out_count": 0}
             if vehicle_classes:
                 for class_name in vehicle_classes.values():
                     result[class_name] = 0
             return result
 
-        in_count = sum(lz.in_count for lz in self.line_zones.values())
-        out_count = sum(lz.out_count for lz in self.line_zones.values())
+        in_count = sum(lz.in_count for lz in line_zones_snapshot)
+        out_count = sum(lz.out_count for lz in line_zones_snapshot)
         result = {"in_count": in_count, "out_count": out_count}
 
         if vehicle_classes:
             for class_id, class_name in vehicle_classes.items():
                 total = 0
-                for lz in self.line_zones.values():
+                for lz in line_zones_snapshot:
                     total += lz.in_count_per_class.get(class_id, 0)
                     total += lz.out_count_per_class.get(class_id, 0)
                 result[class_name] = total
@@ -197,4 +211,5 @@ class LineZoneManager:
 
     @property
     def has_line(self) -> bool:
-        return len(self.line_zones) > 0
+        with self._lock:
+            return len(self.line_zones) > 0

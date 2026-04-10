@@ -21,6 +21,7 @@ from ui.themes import (
     ButtonStyles, Spacing, Typography, ThemeColors,
     InputStyles, MiscStyles
 )
+from ui.interval_panel import IntervalPanel
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,8 @@ class VideoToolbar(QWidget):
         self.lbl_screenshot_count = None
         self.lbl_recording_count = None
         self.lbl_recording = None
+
+        self.interval_panel = None
 
         self._setup_ui()
 
@@ -127,6 +130,10 @@ class VideoToolbar(QWidget):
         ml.addWidget(self.lbl_recording)
 
         layout.addWidget(media_group)
+
+        self.interval_panel = IntervalPanel()
+        layout.addWidget(self.interval_panel)
+
         layout.addStretch()
 
     def _create_slider(self, parent_layout, icon: str, min_val: int, max_val: int, default: int) -> tuple:

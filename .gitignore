@@ -37,6 +37,8 @@ Thumbs.db
 # Project specific
 recordings/
 screenshots/
+nul
+opencode.json
 *.mp4
 *.avi
 *.mkv

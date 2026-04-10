@@ -423,6 +423,37 @@ class InputStyles:
         """
     
     @staticmethod
+    def spin_box():
+        """صندوق الأرقام."""
+        return f"""
+            QSpinBox {{
+                background-color: {ThemeColors.BACKGROUND_MEDIUM};
+                color: {ThemeColors.TEXT_PRIMARY};
+                border: 1px solid {ThemeColors.BORDER_MEDIUM};
+                border-radius: 6px;
+                padding: {Spacing.XS}px {Spacing.SM}px;
+                font-size: {Typography.SIZE_SM}px;
+                font-family: {Typography.FONT_FAMILY};
+            }}
+            QSpinBox:hover {{
+                border-color: {ThemeColors.BORDER_LIGHT};
+            }}
+            QSpinBox:disabled {{
+                background-color: {ThemeColors.BACKGROUND_DARK};
+                color: {ThemeColors.TEXT_DISABLED};
+                border-color: {ThemeColors.BORDER_DARK};
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                background-color: {ThemeColors.BACKGROUND_LIGHT};
+                border: 1px solid {ThemeColors.BORDER_DARK};
+                width: 16px;
+            }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+                background-color: {ThemeColors.INFO};
+            }}
+        """
+    
+    @staticmethod
     def slider():
         """شريط التمرير."""
         return f"""

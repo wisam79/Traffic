@@ -14,12 +14,13 @@
 """
 
 import sys
+import os
 import logging
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 
-from core.config import LOG_LEVEL, LOG_FORMAT, APP_FONT_NAME, APP_FONT_SIZE
+from core.config import LOG_LEVEL, LOG_FORMAT, APP_FONT_NAME, APP_FONT_SIZE, APP_ICON_PATH
 from ui.main_window import MainWindow
 from ui.themes import ThemeColors
 
@@ -66,6 +67,10 @@ def create_application() -> QApplication:
 
     # تعيين النمط الداكن
     app.setStyle("Fusion")
+
+    # تعيين أيقونة التطبيق
+    if os.path.exists(APP_ICON_PATH):
+        app.setWindowIcon(QIcon(APP_ICON_PATH))
 
     logger.info("تم إنشاء تطبيق PySide6")
     return app

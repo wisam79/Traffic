@@ -29,11 +29,11 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QMessageBox, QApplication
 )
 from PySide6.QtCore import Qt, Slot, QTimer, QSettings
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 
 from core.config import (
     MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, APP_FONT_NAME, APP_FONT_SIZE,
-    MODEL_PATH
+    MODEL_PATH, APP_ICON_PATH
 )
 from ui.video_panel import VideoPanel
 from ui.video_toolbar import VideoToolbar
@@ -47,6 +47,7 @@ from ui.styles import (
 from ui.themes import Spacing, StatusBarStyles
 from ui.video_source_manager import VideoSourceManager, VideoInfo
 from engine.ai_thread import AIEngineThread
+from engine.interval_counter import IntervalCounter
 from video.ingestor import VideoIngestor
 from state.app_state import app_state
 
@@ -69,6 +70,9 @@ class MainWindow(QMainWindow):
         # ======================================================================
         self.setWindowTitle("نظام عد المركبات الذكي - تقاطعات المرور")
         self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+
+        if os.path.exists(APP_ICON_PATH):
+            self.setWindowIcon(QIcon(APP_ICON_PATH))
         
         # تطبيق النمط العام مع تحسينات
         self.setStyleSheet(MAIN_WINDOW_STYLE)
@@ -82,11 +86,13 @@ class MainWindow(QMainWindow):
 
         # ======================================================================
         # مدير مصادر الفيديو
-        # ======================================================================
         self.video_source_manager = VideoSourceManager()
 
         # معلومات الفيديو الحالية
         self.current_video_info: Optional[VideoInfo] = None
+
+        # كاشف الكائنات المُعاد استخدامه (يُحمّل مرة واحدة)
+        self._cached_detector = None
 
         # ======================================================================
         # حماية إعادة الدخول
@@ -191,6 +197,8 @@ class MainWindow(QMainWindow):
         self.control_panel.btn_save_session.clicked.connect(self._save_session)
         self.control_panel.btn_load_session.clicked.connect(self._load_session)
 
+        self.video_toolbar.interval_panel.on_interval_changed = self._on_interval_changed
+
         # اختصارات لوحة المفاتيح
         from PySide6.QtGui import QShortcut, QKeySequence
         space_shortcut = QShortcut(QKeySequence("Space"), self)
@@ -221,6 +229,9 @@ class MainWindow(QMainWindow):
         if not source:
             QMessageBox.warning(self, "خطأ", "الرجاء إدخال مصدر فيديو.")
             return
+
+        # مسح إحداثيات الخط القديمة عند تحميل فيديو جديد
+        app_state.clear_line_coordinates()
 
         # إضافة للملفات الأخيرة واستخراج الإطار
         self._add_to_recent_files(str(source))
@@ -302,6 +313,9 @@ class MainWindow(QMainWindow):
         # مسح الخط في AI Engine
         if self.ai_engine:
             self.ai_engine.line_zone_manager.clear_line()
+
+        # مسح إحداثيات الخط من الحالة المشتركة
+        app_state.clear_line_coordinates()
 
         # تحديث شريط الحالة
         self.video_panel.lbl_line_status.setText("الخط: لم يُحدد")
@@ -417,21 +431,34 @@ class MainWindow(QMainWindow):
         # بدء AIEngineThread
         # ==================================================================
         self.ai_engine = AIEngineThread(
-            raw_frame_queue=self.raw_frame_queue
+            raw_frame_queue=self.raw_frame_queue,
+            detector=self._cached_detector
         )
 
         # ربط Signals
         self.ai_engine.frame_ready.connect(self._on_frame_ready)
         self.ai_engine.stats_ready.connect(self._on_stats_ready)
         self.ai_engine.error_occurred.connect(self._on_error)
+        self.ai_engine.interval_completed.connect(self._on_interval_completed)
+
+        # رط عداد الفترات بالواجهة
+        self.video_toolbar.interval_panel.set_interval_counter(
+            self.ai_engine.get_interval_counter()
+        )
 
         # تشغيل الخيط
         self.ai_engine.start()
 
-        # استعادة خط العد من الحالة المشتركة (إن وُجد)
-        saved_line = app_state.get_line_coordinates()
-        if saved_line is not None:
-            self.ai_engine.set_line_coordinates("saved", saved_line)
+        # استعادة خطوط العد من الحالة المشتركة (إن وُجدت)
+        saved_lines = app_state.get_line_coordinates()
+        for line_id, coords in saved_lines.items():
+            point_a, point_b = coords
+            if point_a is not None and point_b is not None:
+                self.ai_engine.set_line_coordinates(line_id, coords)
+
+        # تطبيق فترة العد المحددة
+        selected_interval = self.video_toolbar.interval_panel.get_selected_interval()
+        self.ai_engine.set_counting_interval(selected_interval)
 
         # ==================================================================
         # تحديث الواجهة
@@ -447,6 +474,8 @@ class MainWindow(QMainWindow):
 
         self._is_starting = False
         self._is_streaming = True
+
+        self.video_toolbar.interval_panel.start_updates()
 
         logger.info("تم بدء البث بنجاح")
 
@@ -464,6 +493,8 @@ class MainWindow(QMainWindow):
 
         # إيقاف AI Engine
         if self.ai_engine:
+            # حفظ الكاشف لإعادة استخدامه
+            self._cached_detector = self.ai_engine.detector
             self.ai_engine.stop_processing()
             self.ai_engine.quit()
             self.ai_engine.wait(3000)
@@ -495,6 +526,8 @@ class MainWindow(QMainWindow):
 
         self._is_stopping = False
         self._is_streaming = False
+
+        self.video_toolbar.interval_panel.stop_updates()
 
         logger.info("تم إيقاف البث")
 
@@ -587,18 +620,26 @@ class MainWindow(QMainWindow):
     def _on_line_defined(self, line_id, point_a, point_b) -> None:
         logger.info(f"تم تحديد الخط [{line_id}]: {point_a} -> {point_b}")
 
-        # تخزين الإحداثيات في الحالة المشتركة
-        app_state.set_line_coordinates((point_a, point_b))
+        if point_a is not None and point_b is not None:
+            app_state.set_line_coordinates(line_id, (point_a, point_b))
 
-        # إرسال إلى AI Engine إذا كان يعمل
-        if self.ai_engine and self.ai_engine.isRunning():
-            self.ai_engine.set_line_coordinates(line_id, (point_a, point_b))
+            if self.ai_engine and self.ai_engine.isRunning():
+                self.ai_engine.set_line_coordinates(line_id, (point_a, point_b))
 
-        # تحديث شريط الحالة
-        self.video_panel.lbl_line_status.setText(f"الخط: {point_a} → {point_b}")
-        self.video_panel.lbl_line_status.setStyleSheet(STATUS_LINE_SET_STYLE)
-        self.video_panel.lbl_instruction.setText("✅ تم تعيين الخط! سيتم عد المركبات")
-        self.video_panel.lbl_instruction.setStyleSheet(INSTRUCTION_SUCCESS_STYLE)
+            self.video_panel.lbl_line_status.setText(f"الخط: {point_a} → {point_b}")
+            self.video_panel.lbl_line_status.setStyleSheet(STATUS_LINE_SET_STYLE)
+            self.video_panel.lbl_instruction.setText("✅ تم تعيين الخط! سيتم عد المركبات")
+            self.video_panel.lbl_instruction.setStyleSheet(INSTRUCTION_SUCCESS_STYLE)
+        else:
+            app_state.remove_line_coordinates(line_id)
+
+            if self.ai_engine and self.ai_engine.isRunning():
+                self.ai_engine.set_line_coordinates(line_id, None)
+
+            self.video_panel.lbl_line_status.setText("الخط: لم يُحدد")
+            self.video_panel.lbl_line_status.setStyleSheet(STATUS_LINE_UNSET_STYLE)
+            self.video_panel.lbl_instruction.setText("💡 انقر مرتين على الفيديو لرسم خط العد")
+            self.video_panel.lbl_instruction.setStyleSheet(INSTRUCTION_DEFAULT_STYLE)
 
     def _update_fps_display(self) -> None:
         """
@@ -745,14 +786,41 @@ class MainWindow(QMainWindow):
         stats = app_state.get_stats()
         try:
             if filepath.endswith('.json'):
+                export_data = {"overall": stats}
+                if self.ai_engine:
+                    history = self.ai_engine.get_interval_counter().get_history()
+                    if history:
+                        export_data["intervals"] = [
+                            {
+                                "interval": r.index + 1,
+                                "duration_seconds": round(r.duration_seconds, 1),
+                                "duration": IntervalCounter.format_seconds(r.duration_seconds),
+                                "stats": r.stats
+                            }
+                            for r in history
+                        ]
                 with open(filepath, 'w', encoding='utf-8') as f:
-                    json.dump(stats, f, ensure_ascii=False, indent=2)
+                    json.dump(export_data, f, ensure_ascii=False, indent=2)
             else:
                 with open(filepath, 'w', encoding='utf-8', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow(["القيمة", "العدد"])
                     for key, value in stats.items():
                         writer.writerow([key, value])
+                    if self.ai_engine:
+                        history = self.ai_engine.get_interval_counter().get_history()
+                        if history:
+                            writer.writerow([])
+                            writer.writerow(["=== تفصيل الفترات ===", ""])
+                            writer.writerow(["الفترة", "الإجمالي", "الداخل", "الخارج", "المدة"])
+                            for r in history:
+                                writer.writerow([
+                                    f"#{r.index + 1}",
+                                    r.stats.get('total', 0),
+                                    r.stats.get('in_count', 0),
+                                    r.stats.get('out_count', 0),
+                                    IntervalCounter.format_seconds(r.duration_seconds)
+                                ])
             logger.info(f"تم تصدير الإحصائيات: {filepath}")
         except Exception as e:
             QMessageBox.warning(self, "خطأ", f"فشل التصدير: {e}")
@@ -860,6 +928,27 @@ class MainWindow(QMainWindow):
             if not is_recording:
                 count = self.video_panel.video_controller.recorder.total_recordings
                 self.video_toolbar.lbl_recording_count.setText(f"تسجيلات: {count}")
+
+    @Slot(object)
+    def _on_interval_completed(self, record) -> None:
+        """
+        Slot انتهاء فترة عد
+        =====================
+        يُحدث لوحة الفترات بالسجل الجديد.
+        """
+        try:
+            self.video_toolbar.interval_panel.on_interval_completed(record)
+        except Exception as e:
+            logger.error(f"خطأ في تحديث سجل الفترات: {e}")
+
+    def _on_interval_changed(self, seconds: int) -> None:
+        """
+        معالجة تغيير فترة العد
+        ========================
+        """
+        if self.ai_engine and self.ai_engine.isRunning():
+            self.ai_engine.set_counting_interval(seconds)
+        logger.info(f"تم تغيير فترة العد إلى: {seconds} ثانية")
 
     def closeEvent(self, event) -> None:
         """

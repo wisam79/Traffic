@@ -284,21 +284,25 @@ class VideoPanel(QWidget):
     def _on_lines_changed(self, lines) -> None:
         self.line_manager_widget.update_line_list(lines)
 
-        if self._line_callback and lines:
-            current_coords = {}
-            for line in lines:
-                if len(line.points) >= 2:
-                    current_coords[line.line_id] = (line.points[0], line.points[-1])
+        if not self._line_callback:
+            return
 
-            for line_id, (point_a, point_b) in current_coords.items():
-                if self._sent_line_coords.get(line_id) != (point_a, point_b):
-                    self._line_callback(line_id, point_a, point_b)
+        current_coords = {}
+        for line in lines:
+            if len(line.points) >= 2:
+                current_coords[line.line_id] = (line.points[0], line.points[-1])
 
-            for line_id in list(self._sent_line_coords):
-                if line_id not in current_coords:
-                    self._line_callback(line_id, None, None)
+        # إرسال خطوط جديدة أو مُحدثة
+        for line_id, (point_a, point_b) in current_coords.items():
+            if self._sent_line_coords.get(line_id) != (point_a, point_b):
+                self._line_callback(line_id, point_a, point_b)
 
-            self._sent_line_coords = current_coords
+        # إرسال إزالة الخطوط المحذوفة
+        for line_id in list(self._sent_line_coords):
+            if line_id not in current_coords:
+                self._line_callback(line_id, None, None)
+
+        self._sent_line_coords = current_coords
 
     def _on_line_selected(self, row: int) -> None:
         line_id = self.line_manager_widget.get_selected_line_id()

@@ -69,6 +69,16 @@ TRACKER_FRAME_RATE = 30  # إطار في الثانية
 APP_FONT_NAME = "Segoe UI"
 APP_FONT_SIZE = 10
 
+APP_ICON_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "assets", "app_icon.ico"
+)
+
+APP_ICON_PNG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "assets", "app_icon.png"
+)
+
 # حجم النافذة الرئيسية
 MAIN_WINDOW_WIDTH = 1400
 MAIN_WINDOW_HEIGHT = 900
@@ -85,6 +95,13 @@ LINE_WIDTH = 4
 # عرض حدود نقاط الخط
 POINT_MARKER_SIZE = 16  # حجم الدائرة الخارجية
 POINT_INNER_SIZE = 6    # حجم النقطة الداخلية
+
+# ==============================================================================
+# إعدادات فترة العد - Counting Interval Settings
+# ==============================================================================
+
+# فترة العد الافتراضية بالثواني (0 = كامل المدة، 300 = 5 دقائق، إلخ)
+DEFAULT_COUNTING_INTERVAL = 0
 
 # ==============================================================================
 # إعدادات السجل - Logging Settings
