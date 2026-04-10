@@ -1,17 +1,11 @@
 """
 ملف لوحة التحكم - Control Panel
 =================================
-يُنشئ لوحة التحكم اليمنى مع الأزرار والإحصائيات.
-
-المسؤوليات:
-- إنشاء مجموعة اختيار مصدر الفيديو
-- إنشاء مجموعة أزرار التحكم
-- إنشاء بطاقات الإحصائيات الاحترافية
-- تحديث الإحصائيات
+لوحة التحكم اليسرى المضغوطة مع الأزرار والإحصائيات.
+مُصممة لتناسب بدون تمرير.
 
 المرتبط به:
 - يُستورد من: main_window.py
-- مرتبط بـ: ai_thread.py (تحديث الإحصائيات)
 """
 
 import logging
@@ -20,46 +14,50 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QGridLayout, QPushButton, QLabel, QLineEdit, QFileDialog,
-    QListWidget, QListWidgetItem, QMenu, QFrame, QScrollArea
+    QListWidget, QListWidgetItem, QMenu, QFrame
 )
 from PySide6.QtCore import Qt, Signal
 
-logger = logging.getLogger(__name__)
-
 from ui.styles import (
     CONTROL_PANEL_STYLE, BUTTON_START_STYLE, BUTTON_STOP_STYLE,
-    BUTTON_CLEAR_STYLE, BUTTON_RESET_STYLE, STAT_LABEL_STYLE,
+    BUTTON_CLEAR_STYLE, BUTTON_RESET_STYLE,
     STAT_TOTAL_VALUE_STYLE, STAT_IN_VALUE_STYLE, STAT_OUT_VALUE_STYLE,
     STAT_VEHICLE_VALUE_STYLE
 )
 from ui.themes import (
     InputStyles, ListStyles, Spacing, Typography,
-    ThemeColors, StatCardStyles, MiscStyles
+    ThemeColors, StatCardStyles, MiscStyles, ButtonStyles
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ControlPanel(QWidget):
     """
-    لوحة التحكم اليمنى
-    ===================
-    تحتوي على جميع عناصر التحكم والعرض.
+    لوحة التحكم اليسرى المضغوطة
+    =============================
     """
 
     source_selected = Signal(str)
 
     def __init__(self):
         super().__init__()
-        self.setMaximumWidth(340)
-        self.setMinimumWidth(280)
+        self.setMaximumWidth(300)
+        self.setMinimumWidth(240)
 
         self.txt_source = None
         self.btn_select_source = None
         self.btn_show_info = None
+        self.btn_detect_cameras = None
         self.btn_load_video = None
         self.btn_start_stop = None
         self.btn_clear_line = None
         self.btn_reset_counts = None
         self.lst_recent_files = None
+        self.btn_export = None
+        self.btn_about = None
+        self.btn_save_session = None
+        self.btn_load_session = None
 
         self.lbl_total_value = None
         self.lbl_in_value = None
@@ -69,176 +67,122 @@ class ControlPanel(QWidget):
         self.lbl_motorcycle_value = None
         self.lbl_bus_value = None
 
+        # Callback لإزالة ملف من القائمة الأخيرة
+        self.on_remove_recent_file = None
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(MiscStyles.scroll_area())
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(Spacing.XS)
+        layout.setContentsMargins(Spacing.XS, Spacing.XS, Spacing.XS, Spacing.XS)
 
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setSpacing(Spacing.MD)
-        layout.setContentsMargins(Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM)
-
-        source_group = self._create_source_group()
-        layout.addWidget(source_group)
-
-        recent_group = self._create_recent_files_group()
-        layout.addWidget(recent_group)
-
-        controls_group = self._create_controls_group()
-        layout.addWidget(controls_group)
-
-        stats_section = self._create_stats_section()
-        layout.addWidget(stats_section)
-
+        layout.addWidget(self._create_source_group())
+        layout.addWidget(self._create_recent_group())
+        layout.addWidget(self._create_stats_section())
+        layout.addWidget(self._create_controls_group())
         layout.addStretch()
 
-        scroll.setWidget(container)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
-
     def _create_source_group(self) -> QGroupBox:
-        group = QGroupBox("مصدر الفيديو")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(Spacing.SM)
+        group = QGroupBox("المصدر")
+        group.setStyleSheet(CONTROL_PANEL_STYLE)
+        gl = QVBoxLayout(group)
+        gl.setSpacing(2)
+        gl.setContentsMargins(6, 14, 6, 6)
 
-        source_layout = QHBoxLayout()
+        row = QHBoxLayout()
+        row.setSpacing(2)
 
         self.txt_source = QLineEdit()
-        self.txt_source.setPlaceholderText("رابط RTSP أو مسار ملف أو رقم كاميرا")
+        self.txt_source.setPlaceholderText("ملف/كاميرا/RTSP")
         self.txt_source.setText("0")
         self.txt_source.setStyleSheet(InputStyles.line_edit())
-        source_layout.addWidget(self.txt_source, stretch=1)
+        row.addWidget(self.txt_source, stretch=1)
 
         self.btn_select_source = QPushButton("📂")
-        self.btn_select_source.setFixedSize(36, 36)
-        self.btn_select_source.setToolTip("تصفح ملفات الفيديو")
+        self.btn_select_source.setFixedSize(30, 30)
+        self.btn_select_source.setToolTip("تصفح")
         self.btn_select_source.setStyleSheet(InputStyles.combo_box())
         self.btn_select_source.clicked.connect(self._on_browse_file)
-        source_layout.addWidget(self.btn_select_source)
+        row.addWidget(self.btn_select_source)
 
-        layout.addLayout(source_layout)
+        self.btn_detect_cameras = QPushButton("📷")
+        self.btn_detect_cameras.setFixedSize(30, 30)
+        self.btn_detect_cameras.setToolTip("اكتشاف كاميرات")
+        self.btn_detect_cameras.setStyleSheet(InputStyles.combo_box())
+        self.btn_detect_cameras.clicked.connect(self._on_detect_cameras)
+        row.addWidget(self.btn_detect_cameras)
 
-        self.btn_show_info = QPushButton("ℹ️ معلومات الفيديو")
+        gl.addLayout(row)
+
+        self.btn_show_info = QPushButton("ℹ️ معلومات")
+        self.btn_show_info.setToolTip("معلومات الفيديو")
         self.btn_show_info.setStyleSheet(MiscStyles.tool_button())
-        layout.addWidget(self.btn_show_info)
+        gl.addWidget(self.btn_show_info)
 
         return group
 
-    def _create_recent_files_group(self) -> QGroupBox:
+    def _create_recent_group(self) -> QGroupBox:
         group = QGroupBox("الأخيرة")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(Spacing.XS)
+        group.setStyleSheet(CONTROL_PANEL_STYLE)
+        gl = QVBoxLayout(group)
+        gl.setSpacing(2)
+        gl.setContentsMargins(6, 14, 6, 6)
 
         self.lst_recent_files = QListWidget()
-        self.lst_recent_files.setMaximumHeight(80)
+        self.lst_recent_files.setMaximumHeight(50)
         self.lst_recent_files.setStyleSheet(ListStyles.list_widget())
         self.lst_recent_files.itemClicked.connect(self._on_recent_file_clicked)
         self.lst_recent_files.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.lst_recent_files.customContextMenuRequested.connect(self._on_recent_file_context_menu)
-        layout.addWidget(self.lst_recent_files)
-
-        btn_clear_recent = QPushButton("مسح القائمة")
-        btn_clear_recent.setStyleSheet(MiscStyles.tool_button())
-        btn_clear_recent.clicked.connect(self._on_clear_recent)
-        layout.addWidget(btn_clear_recent)
-
-        return group
-
-    def _create_controls_group(self) -> QGroupBox:
-        group = QGroupBox("التحكم")
-        group.setStyleSheet(CONTROL_PANEL_STYLE)
-        layout = QVBoxLayout(group)
-        layout.setSpacing(Spacing.SM)
-
-        self.btn_load_video = QPushButton("▶ تحميل الفيديو")
-        self.btn_load_video.setStyleSheet(BUTTON_START_STYLE)
-        layout.addWidget(self.btn_load_video)
-
-        self.btn_start_stop = QPushButton("⏸ بدء التحليل")
-        self.btn_start_stop.setStyleSheet(BUTTON_STOP_STYLE)
-        self.btn_start_stop.setEnabled(False)
-        layout.addWidget(self.btn_start_stop)
-
-        row = QHBoxLayout()
-        row.setSpacing(Spacing.SM)
-
-        self.btn_clear_line = QPushButton("🗑 مسح الخط")
-        self.btn_clear_line.setStyleSheet(BUTTON_CLEAR_STYLE)
-        row.addWidget(self.btn_clear_line)
-
-        self.btn_reset_counts = QPushButton("🔄 إعادة العد")
-        self.btn_reset_counts.setStyleSheet(BUTTON_RESET_STYLE)
-        row.addWidget(self.btn_reset_counts)
-
-        layout.addLayout(row)
+        gl.addWidget(self.lst_recent_files)
 
         return group
 
     def _create_stats_section(self) -> QWidget:
         section = QWidget()
         layout = QVBoxLayout(section)
-        layout.setSpacing(Spacing.MD)
+        layout.setSpacing(Spacing.XS)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("أعداد المركبات")
-        title.setStyleSheet(f"color: {ThemeColors.TEXT_PRIMARY}; font-size: {Typography.SIZE_XL}px; font-weight: bold; font-family: {Typography.FONT_FAMILY};")
-        layout.addWidget(title)
-
         top_row = QHBoxLayout()
-        top_row.setSpacing(Spacing.SM)
+        top_row.setSpacing(2)
 
-        top_row.addWidget(self._create_stat_card("الإجمالي", "0", STAT_TOTAL_VALUE_STYLE, StatCardStyles.total_card()))
-        top_row.addWidget(self._create_stat_card("داخل", "0", STAT_IN_VALUE_STYLE, StatCardStyles.in_card()))
-        top_row.addWidget(self._create_stat_card("خارج", "0", STAT_OUT_VALUE_STYLE, StatCardStyles.out_card()))
+        top_row.addWidget(self._make_card("إجمالي", "0", STAT_TOTAL_VALUE_STYLE, StatCardStyles.total_card()))
+        top_row.addWidget(self._make_card("داخل", "0", STAT_IN_VALUE_STYLE, StatCardStyles.in_card()))
+        top_row.addWidget(self._make_card("خارج", "0", STAT_OUT_VALUE_STYLE, StatCardStyles.out_card()))
 
         layout.addLayout(top_row)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(MiscStyles.separator())
-        layout.addWidget(sep)
-
-        types_label = QLabel("حسب النوع")
-        types_label.setStyleSheet(f"color: {ThemeColors.TEXT_MUTED}; font-size: {Typography.SIZE_SM}px; font-weight: bold;")
-        layout.addWidget(types_label)
-
         types_grid = QGridLayout()
-        types_grid.setSpacing(Spacing.SM)
-
-        self.lbl_car_value = self._add_vehicle_type(types_grid, 0, "🚗 سيارات", "0")
-        self.lbl_truck_value = self._add_vehicle_type(types_grid, 1, "🚛 شاحنات", "0")
-        self.lbl_motorcycle_value = self._add_vehicle_type(types_grid, 2, "🏍 دراجات", "0")
-        self.lbl_bus_value = self._add_vehicle_type(types_grid, 3, "🚌 حافلات", "0")
-
+        types_grid.setSpacing(2)
+        self.lbl_car_value = self._add_type(types_grid, 0, "🚗", "0")
+        self.lbl_truck_value = self._add_type(types_grid, 1, "🚛", "0")
+        self.lbl_motorcycle_value = self._add_type(types_grid, 2, "🏍", "0")
+        self.lbl_bus_value = self._add_type(types_grid, 3, "🚌", "0")
         layout.addLayout(types_grid)
 
         return section
 
-    def _create_stat_card(self, label_text: str, value_text: str, value_style: str, card_style: str) -> QFrame:
+    def _make_card(self, label_text: str, value_text: str, value_style: str, card_style: str) -> QFrame:
         card = QFrame()
         card.setStyleSheet(card_style)
-        card_layout = QVBoxLayout(card)
-        card_layout.setSpacing(Spacing.XS)
-        card_layout.setContentsMargins(Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM)
-        card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cl = QVBoxLayout(card)
+        cl.setSpacing(0)
+        cl.setContentsMargins(4, 4, 4, 4)
+        cl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         lbl = QLabel(label_text)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(f"color: {ThemeColors.TEXT_MUTED}; font-size: {Typography.SIZE_SM}px; font-weight: bold;")
-        card_layout.addWidget(lbl)
+        lbl.setStyleSheet(f"color: {ThemeColors.TEXT_MUTED}; font-size: {Typography.SIZE_XS}px; font-weight: bold;")
+        cl.addWidget(lbl)
 
         val = QLabel(value_text)
         val.setAlignment(Qt.AlignmentFlag.AlignCenter)
         val.setStyleSheet(value_style)
-        card_layout.addWidget(val)
+        cl.addWidget(val)
 
-        if label_text == "الإجمالي":
+        if label_text == "إجمالي":
             self.lbl_total_value = val
         elif label_text == "داخل":
             self.lbl_in_value = val
@@ -247,37 +191,91 @@ class ControlPanel(QWidget):
 
         return card
 
-    def _add_vehicle_type(self, grid: QGridLayout, row: int, label_text: str, value_text: str) -> QLabel:
+    def _add_type(self, grid: QGridLayout, row: int, icon: str, value_text: str) -> QLabel:
         card = QFrame()
         card.setStyleSheet(StatCardStyles.vehicle_card())
-        card_layout = QHBoxLayout(card)
-        card_layout.setContentsMargins(Spacing.SM, Spacing.XS, Spacing.SM, Spacing.XS)
-        card_layout.setSpacing(Spacing.SM)
+        cl = QHBoxLayout(card)
+        cl.setContentsMargins(4, 1, 4, 1)
+        cl.setSpacing(4)
 
-        lbl = QLabel(label_text)
-        lbl.setStyleSheet(f"color: {ThemeColors.TEXT_SECONDARY}; font-size: {Typography.SIZE_BASE}px;")
-        card_layout.addWidget(lbl)
+        lbl = QLabel(icon)
+        lbl.setStyleSheet(f"font-size: {Typography.SIZE_SM}px;")
+        cl.addWidget(lbl)
 
-        card_layout.addStretch()
+        cl.addStretch()
 
         val = QLabel(value_text)
         val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         val.setStyleSheet(STAT_VEHICLE_VALUE_STYLE)
-        card_layout.addWidget(val)
+        cl.addWidget(val)
 
         grid.addWidget(card, row, 0)
-
         return val
 
-    def _on_browse_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "اختيار ملف فيديو",
-            "",
-            "ملفات فيديو (*.mp4 *.avi *.mkv *.mov);;جميع الملفات (*)"
-        )
-        if file_path:
-            self.txt_source.setText(file_path)
+    def _create_controls_group(self) -> QGroupBox:
+        group = QGroupBox("التحكم")
+        group.setStyleSheet(CONTROL_PANEL_STYLE)
+        gl = QVBoxLayout(group)
+        gl.setSpacing(2)
+        gl.setContentsMargins(6, 14, 6, 6)
+
+        self.btn_load_video = QPushButton("▶ تحميل")
+        self.btn_load_video.setToolTip("تحميل الفيديو (Ctrl+O)")
+        self.btn_load_video.setStyleSheet(BUTTON_START_STYLE)
+        gl.addWidget(self.btn_load_video)
+
+        self.btn_start_stop = QPushButton("⏸ تحليل")
+        self.btn_start_stop.setToolTip("بدء/إيقاف التحليل (Space)")
+        self.btn_start_stop.setStyleSheet(BUTTON_STOP_STYLE)
+        self.btn_start_stop.setEnabled(False)
+        gl.addWidget(self.btn_start_stop)
+
+        row1 = QHBoxLayout()
+        row1.setSpacing(2)
+
+        self.btn_clear_line = QPushButton("🗑 خط")
+        self.btn_clear_line.setToolTip("مسح الخطوط")
+        self.btn_clear_line.setStyleSheet(BUTTON_CLEAR_STYLE)
+        row1.addWidget(self.btn_clear_line)
+
+        self.btn_reset_counts = QPushButton("🔄 عد")
+        self.btn_reset_counts.setToolTip("إعادة العدادات")
+        self.btn_reset_counts.setStyleSheet(BUTTON_RESET_STYLE)
+        row1.addWidget(self.btn_reset_counts)
+
+        gl.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(2)
+
+        self.btn_export = QPushButton("📊 تصدير")
+        self.btn_export.setToolTip("تصدير CSV/JSON")
+        self.btn_export.setStyleSheet(ButtonStyles.info_button())
+        row2.addWidget(self.btn_export)
+
+        self.btn_about = QPushButton("ℹ️")
+        self.btn_about.setToolTip("حول التطبيق")
+        self.btn_about.setStyleSheet(MiscStyles.tool_button())
+        row2.addWidget(self.btn_about)
+
+        gl.addLayout(row2)
+
+        row3 = QHBoxLayout()
+        row3.setSpacing(2)
+
+        self.btn_save_session = QPushButton("💾 حفظ")
+        self.btn_save_session.setToolTip("حفظ الجلسة")
+        self.btn_save_session.setStyleSheet(ButtonStyles.secondary_button())
+        row3.addWidget(self.btn_save_session)
+
+        self.btn_load_session = QPushButton("📂 تحميل")
+        self.btn_load_session.setToolTip("تحميل جلسة")
+        self.btn_load_session.setStyleSheet(ButtonStyles.secondary_button())
+        row3.addWidget(self.btn_load_session)
+
+        gl.addLayout(row3)
+
+        return group
 
     def update_stats(self, stats: dict) -> None:
         try:
@@ -300,6 +298,14 @@ class ControlPanel(QWidget):
             item.setToolTip(file_path)
             self.lst_recent_files.addItem(item)
 
+    def _on_browse_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "اختيار ملف فيديو", "",
+            "ملفات فيديو (*.mp4 *.avi *.mkv *.mov);;جميع الملفات (*)"
+        )
+        if file_path:
+            self.txt_source.setText(file_path)
+
     def _on_recent_file_clicked(self, item) -> None:
         file_path = item.data(Qt.ItemDataRole.UserRole)
         if file_path:
@@ -310,15 +316,28 @@ class ControlPanel(QWidget):
         item = self.lst_recent_files.itemAt(pos)
         if not item:
             return
-
         menu = QMenu(self)
-        remove_action = menu.addAction("إزالة من القائمة")
-
+        remove_action = menu.addAction("إزالة")
         action = menu.exec(self.lst_recent_files.mapToGlobal(pos))
-
         if action == remove_action:
-            row = self.lst_recent_files.row(item)
-            self.lst_recent_files.takeItem(row)
+            file_path = item.data(Qt.ItemDataRole.UserRole)
+            self.lst_recent_files.takeItem(self.lst_recent_files.row(item))
+            # تحديث مدير الملفات الأخيرة
+            if self.on_remove_recent_file and file_path:
+                self.on_remove_recent_file(file_path)
 
     def _on_clear_recent(self) -> None:
         self.lst_recent_files.clear()
+
+    def _on_detect_cameras(self) -> None:
+        from ui.video_source_manager import VideoSourceManager
+        from PySide6.QtWidgets import QMessageBox
+        cameras = VideoSourceManager.discover_cameras()
+        if cameras:
+            self.txt_source.setText(cameras[0])
+            QMessageBox.information(
+                self, "الكاميرات",
+                f"تم اكتشاف {len(cameras)} كاميرا:\n" + "\n".join(f"  كاميرا {c}" for c in cameras)
+            )
+        else:
+            QMessageBox.information(self, "الكاميرات", "لم يتم اكتشاف أي كاميرا")

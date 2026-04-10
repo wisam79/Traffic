@@ -87,10 +87,17 @@ class AIEngineThread(QThread):
         self.preprocessor = FramePreprocessor()
 
         # كاشف الكائنات
-        self.detector = ObjectDetector()
+        try:
+            self.detector = ObjectDetector()
+        except Exception as e:
+            logger.error(f"فشل تهيئة الكاشف: {e}")
+            self.detector = None
 
         # متتبع المركبات
         self.tracker = VehicleTracker()
+
+        # عداد الأخطاء المتتالية
+        self._consecutive_errors = 0
 
         # مدير خط العد
         self.line_zone_manager = LineZoneManager()
@@ -147,12 +154,19 @@ class AIEngineThread(QThread):
                 # معالجة الإطار
                 try:
                     annotated_frame, stats = self._process_frame(frame)
+                    self._consecutive_errors = 0
                     self.frame_ready.emit(annotated_frame)
                     self.stats_ready.emit(stats)
                 except Exception as e:
-                    logger.error(f"خطأ في معالجة الإطار: {e}")
-                    self.error_occurred.emit(f"خطأ في معالجة الإطار: {e}")
-                    continue
+                    self._consecutive_errors += 1
+                    logger.error(f"خطأ معالجة الإطار ({self._consecutive_errors}): {e}")
+                    if self._consecutive_errors <= 2:
+                        self.error_occurred.emit(str(e))
+                    if self._consecutive_errors >= 3:
+                        logger.critical("أخطاء متتالية كثيرة — يتم إيقاف المحرك")
+                        self.error_occurred.emit("تم إيقاف المحرك بسبب أخطاء متتالية. أعد تشغيل البث.")
+                        self.stop_processing()
+                        return
 
         except Exception as e:
             self.error_occurred.emit(f"خطأ في خيط الذكاء الاصطناعي: {e}")
@@ -176,6 +190,8 @@ class AIEngineThread(QThread):
         input_tensor, scale_info = self.preprocessor.preprocess(frame)
 
         # الخطوة 2: كشف الكائنات (مع إعادة تحجيم الإحداثيات)
+        if self.detector is None:
+            raise RuntimeError("كاشف الكائنات غير مُهيأ — لا يمكن معالجة الإطارات")
         detections = self.detector.detect(input_tensor, scale_info)
 
         # الخطوة 3: تتبع المركبات
@@ -185,7 +201,7 @@ class AIEngineThread(QThread):
         vehicle_detections = self.tracker.filter_vehicles(tracked_detections)
 
         # الخطوة 5: تحديث خط العد
-        if self.line_zone_manager.line_zone is not None:
+        if self.line_zone_manager.has_line:
             self.line_zone_manager.update(vehicle_detections)
 
         # الخطوة 6: رسم على الإطار
@@ -218,10 +234,10 @@ class AIEngineThread(QThread):
         annotated = frame.copy()
 
         # رسم خط العد إذا موجود
-        if self.line_zone_manager.line_zone is not None:
+        for line_zone in self.line_zone_manager.line_zones.values():
             annotated = self.line_annotator.annotate(
                 frame=annotated,
-                line_counter=self.line_zone_manager.line_zone
+                line_counter=line_zone
             )
 
         # رسم صناديق المركبات
@@ -247,7 +263,7 @@ class AIEngineThread(QThread):
 
         يعرض:
         - العدد التراكمي من خط العد (in/out/total)
-        - عدد المركبات المرئية حالياً حسب النوع
+        - العدد التراكمي حسب نوع المركبة (من خط العد)
 
         المُعاملات (Args):
             detections: الكشوفات الحالية
@@ -255,46 +271,29 @@ class AIEngineThread(QThread):
         المرجع (Returns):
             قاموس يحتوي على جميع الأعداد
         """
-        stats = {}
+        line_counts = self.line_zone_manager.get_counts(self.vehicle_classes)
+        stats = {
+            'in_count': line_counts['in_count'],
+            'out_count': line_counts['out_count'],
+            'total': line_counts['in_count'] + line_counts['out_count'],
+        }
 
-        # أعداد خط العد (تراكمية)
-        line_counts = self.line_zone_manager.get_counts()
-        stats['in_count'] = line_counts['in_count']
-        stats['out_count'] = line_counts['out_count']
-        stats['total'] = line_counts['in_count'] + line_counts['out_count']
-
-        # تهيئة أعداد الفئات
         for class_id, class_name in self.vehicle_classes.items():
-            stats[class_name] = 0
-
-        # أعداد المركبات المرئية حالياً حسب الفئة
-        if detections is not None and len(detections) > 0:
-            unique_classes, counts = np.unique(
-                detections.class_id, return_counts=True
-            )
-            for class_id, count in zip(unique_classes, counts):
-                class_name = self.vehicle_classes.get(int(class_id), None)
-                if class_name:
-                    stats[class_name] = int(count)
+            stats[class_name] = line_counts.get(class_name, 0)
 
         return stats
 
     @Slot(object)
     def set_line_coordinates(
         self,
+        line_id: str,
         coords: Optional[Tuple[Tuple[int, int], Tuple[int, int]]]
     ) -> None:
-        """
-        Slot لاستقبال إحداثيات الخط من واجهة المستخدم
-
-        المُعاملات (Args):
-            coords: نقطتي الخط أو None للمسح
-        """
         if coords is None:
-            self.line_zone_manager.clear_line()
+            self.line_zone_manager.remove_line(line_id)
         else:
             point_a, point_b = coords
-            self.line_zone_manager.set_line(point_a, point_b)
+            self.line_zone_manager.set_line(line_id, point_a, point_b)
 
     def reset_counts(self) -> None:
         """

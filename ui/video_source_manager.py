@@ -138,6 +138,24 @@ class VideoSourceManager:
             '.flv', '.webm', '.m4v', '.mpeg', '.mpg'
         }
 
+    @staticmethod
+    def discover_cameras(max_check: int = 5) -> list:
+        """
+        اكتشاف الكاميرات المتاحة
+        ==========================
+        يتحقق من أول max_check مؤشرات كاميرا.
+        """
+        import cv2
+        cameras = []
+        for i in range(max_check):
+            cap = cv2.VideoCapture(i)
+            try:
+                if cap.isOpened():
+                    cameras.append(str(i))
+            finally:
+                cap.release()
+        return cameras
+
     def detect_source_type(self, source) -> str:
         """
         اكتشاف نوع مصدر الفيديو
@@ -148,20 +166,29 @@ class VideoSourceManager:
         المرجع (Returns):
             نوع المصدر (VideoSourceType)
         """
-        # كاميرا (رقم) - يجب أن يكون int فقط
+        # كاميرا (رقم)
         if isinstance(source, int):
             return VideoSourceType.CAMERA
         if isinstance(source, float) and source.is_integer():
             return VideoSourceType.CAMERA
-        
-        source_str = str(source).lower()
-        
+
+        source_str = str(source).strip()
+
+        # كاميرا (نص يمثل رقماً مثل "0" أو "1")
+        try:
+            int_val = int(source_str)
+            return VideoSourceType.CAMERA
+        except (ValueError, TypeError):
+            pass
+
+        source_str_lower = source_str.lower()
+
         # RTSP
-        if source_str.startswith('rtsp://'):
+        if source_str_lower.startswith('rtsp://'):
             return VideoSourceType.RTSP
-        
+
         # HTTP/HTTPS
-        if source_str.startswith(('http://', 'https://')):
+        if source_str_lower.startswith(('http://', 'https://')):
             return VideoSourceType.HTTP
         
         # ملف
@@ -290,6 +317,7 @@ class VideoSourceManager:
         video_info.file_name = url
         video_info.fps = 30.0  # افتراضي للبث
 
+        cap = None
         try:
             cap = cv2.VideoCapture(url)
             if not cap.isOpened():
@@ -305,6 +333,10 @@ class VideoSourceManager:
         except Exception as e:
             video_info.error_message = str(e)
             return video_info
+
+        finally:
+            if cap is not None:
+                cap.release()
 
     def validate_source(self, source) -> Tuple[bool, str]:
         """

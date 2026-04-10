@@ -163,7 +163,7 @@ class TestLineZoneManagerInit:
     def test_initial_no_line(self):
         """لا يوجد خط عند البداية"""
         manager = LineZoneManager()
-        assert manager.line_zone is None
+        assert len(manager.line_zones) == 0
 
     def test_initial_counts_zero(self):
         """العدادات صفرية عند البداية"""
@@ -179,34 +179,34 @@ class TestLineZoneManagerSetLine:
     def test_set_line(self):
         """تعيين خط عد"""
         manager = LineZoneManager()
-        manager.set_line((100, 200), (500, 200))
-        assert manager.line_zone is not None
+        manager.set_line("test", (100, 200), (500, 200))
+        assert len(manager.line_zones) > 0
 
     def test_set_line_horizontal(self):
         """خط أفقي"""
         manager = LineZoneManager()
-        manager.set_line((0, 300), (640, 300))
-        assert manager.line_zone is not None
+        manager.set_line("test", (0, 300), (640, 300))
+        assert len(manager.line_zones) > 0
 
     def test_set_line_vertical(self):
         """خط عمودي"""
         manager = LineZoneManager()
-        manager.set_line((320, 0), (320, 480))
-        assert manager.line_zone is not None
+        manager.set_line("test", (320, 0), (320, 480))
+        assert len(manager.line_zones) > 0
 
     def test_set_line_diagonal(self):
         """خط مائل"""
         manager = LineZoneManager()
-        manager.set_line((100, 100), (500, 400))
-        assert manager.line_zone is not None
+        manager.set_line("test", (100, 100), (500, 400))
+        assert len(manager.line_zones) > 0
 
     def test_clear_line(self):
         """مسح الخط"""
         manager = LineZoneManager()
-        manager.set_line((100, 200), (500, 200))
-        assert manager.line_zone is not None
+        manager.set_line("test", (100, 200), (500, 200))
+        assert len(manager.line_zones) > 0
         manager.clear_line()
-        assert manager.line_zone is None
+        assert len(manager.line_zones) == 0
 
 
 class TestLineZoneManagerCounts:
@@ -215,7 +215,7 @@ class TestLineZoneManagerCounts:
     def test_counts_after_no_update(self):
         """العدادات بعد تعيين الخط بدون تحديث"""
         manager = LineZoneManager()
-        manager.set_line((100, 200), (500, 200))
+        manager.set_line("test", (100, 200), (500, 200))
         counts = manager.get_counts()
         assert counts["in_count"] == 0
         assert counts["out_count"] == 0
@@ -223,7 +223,7 @@ class TestLineZoneManagerCounts:
     def test_reset_counts(self):
         """إعادة تعيين العدادات"""
         manager = LineZoneManager()
-        manager.set_line((100, 200), (500, 200))
+        manager.set_line("test", (100, 200), (500, 200))
         manager.reset_counts()
         counts = manager.get_counts()
         assert counts["in_count"] == 0
@@ -232,13 +232,14 @@ class TestLineZoneManagerCounts:
     def test_reset_keeps_line(self):
         """إعادة التعيين لا تحذف الخط"""
         manager = LineZoneManager()
-        manager.set_line((100, 200), (500, 200))
+        manager.set_line("test", (100, 200), (500, 200))
         manager.reset_counts()
-        assert manager.line_zone is not None
+        assert len(manager.line_zones) > 0
 
     def test_counts_without_line(self):
         """العدادات بدون خط مُعين"""
         manager = LineZoneManager()
+        assert not manager.has_line
         counts = manager.get_counts()
         assert counts["in_count"] == 0
         assert counts["out_count"] == 0
@@ -251,7 +252,7 @@ class TestLineZoneManagerCounts:
     def test_update_with_empty_detections(self, empty_detections):
         """تحديث بكشوفات فارغة"""
         manager = LineZoneManager()
-        manager.set_line((100, 200), (500, 200))
+        manager.set_line("test", (100, 200), (500, 200))
         manager.update(empty_detections)
         counts = manager.get_counts()
         assert counts["in_count"] == 0

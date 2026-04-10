@@ -274,9 +274,6 @@ class AdvancedLineDrawer:
             self._save_current_line()
             self._finish_drawing()
 
-            # بدء خط جديد فوراً
-            self.is_drawing = False
-
             return "line_complete"
 
 
@@ -391,6 +388,7 @@ class AdvancedLineDrawer:
             line_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             line_item.setPen(line_pen)
             line_item.setZValue(50)
+            line_item._line_id = line_data.line_id
             line_data.graphics_items.append(line_item)
 
             # إضافة سهم الاتجاه
@@ -400,6 +398,7 @@ class AdvancedLineDrawer:
             arrow.setDefaultTextColor(QColor(0, 255, 255))
             arrow.setPos(mid_x - 8, mid_y - 8)
             arrow.setZValue(51)
+            arrow._line_id = line_data.line_id
             line_data.graphics_items.append(arrow)
         else:
             # مضلع
@@ -408,6 +407,7 @@ class AdvancedLineDrawer:
             polygon_item.setPen(QPen(QColor(255, 165, 0, 220), 3))
             polygon_item.setBrush(QColor(255, 165, 0, 40))
             polygon_item.setZValue(50)
+            polygon_item._line_id = line_data.line_id
             self.scene.addItem(polygon_item)
             line_data.graphics_items.append(polygon_item)
 
@@ -421,6 +421,7 @@ class AdvancedLineDrawer:
                 QColor(color.red(), color.green(), color.blue(), 120)
             )
             marker.setZValue(52)
+            marker._line_id = line_data.line_id
             line_data.graphics_items.append(marker)
 
     def _finish_drawing(self) -> None:
@@ -515,17 +516,24 @@ class AdvancedLineDrawer:
 
         logger.info("تم مسح جميع الخطوط")
 
+    def _clear_scene_items(self):
+        if self.scene is None:
+            return
+        items_to_remove = []
+        for item in self.scene.items():
+            if hasattr(item, '_line_id'):
+                items_to_remove.append(item)
+        for item in items_to_remove:
+            self.scene.removeItem(item)
+        for line in self.lines:
+            line.graphics_items = []
+
     def _redraw_all_lines(self) -> None:
         """إعادة رسم جميع الخطوط."""
         if not self.scene:
             return
 
-        # حذف كل شيء
-        for line_data in self.lines:
-            for item in line_data.graphics_items:
-                self.scene.removeItem(item)
-            line_data.graphics_items.clear()
+        self._clear_scene_items()
 
-        # إعادة الرسم
         for line_data in self.lines:
             self._draw_final_line(line_data)

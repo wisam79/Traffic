@@ -18,10 +18,17 @@
 import queue
 import logging
 import threading
+import time
 from typing import Optional
 import cv2
 
 logger = logging.getLogger(__name__)
+
+# امتدادات ملفات الفيديو المدعومة للتحكم بسرعة التشغيل
+VIDEO_FILE_EXTENSIONS = (
+    ".mp4", ".avi", ".mkv", ".mov", ".wmv",
+    ".flv", ".webm", ".m4v", ".mpeg", ".mpg"
+)
 
 
 class VideoIngestor:
@@ -46,48 +53,78 @@ class VideoIngestor:
         self.max_queue_size = max_queue_size
 
         self.stream: Optional[cv2.VideoCapture] = None
-        self.is_running = False
-        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._stream_lock = threading.Lock()
 
     def start(self) -> bool:
         """بدء التقاط الفيديو باستخدام OpenCV"""
         try:
-            self.stream = cv2.VideoCapture(self.source)
-            if not self.stream.isOpened():
+            stream = cv2.VideoCapture(self.source)
+            if not stream.isOpened():
                 logger.error(f"فشل فتح مصدر الفيديو: {self.source}")
+                stream.release()
                 return False
 
-            self.is_running = True
+            with self._stream_lock:
+                self.stream = stream
+
+            self._stop_event.clear()
             logger.info(f"تم بدء بث الفيديو بنجاح (OpenCV): {self.source}")
             return True
 
         except Exception as e:
             logger.error(f"أثناء بدء البث: {e}")
-            self.is_running = False
+            self._stop_event.set()
             return False
 
     def read_loop(self) -> None:
         """حلقة القراءة المستمرة للخيط مع تنظيم السرعة (FPS Pacing) للوصول للاختبار الحقيقي."""
-        if not self.stream or not self.is_running:
+        if not self.stream or self._stop_event.is_set():
             logger.warning("لم يُبدأ البث بعد.")
             return
 
-        import time
         # حساب تأخير الإطار للتحكم بسرعة القراءة
         fps = self.stream.get(cv2.CAP_PROP_FPS)
         if fps <= 0 or fps > 120:
             fps = 30.0
         frame_delay = 1.0 / fps
 
+        # تحديد ما إذا كان المصدر ملف فيديو يحتاج تنظيم سرعة
+        is_video_file = str(self.source).lower().endswith(VIDEO_FILE_EXTENSIONS)
+
         try:
-            while self.is_running:
+            while not self._stop_event.is_set():
                 loop_start = time.perf_counter()
 
-                ret, frame = self.stream.read()
-                
+                with self._stream_lock:
+                    if self.stream is None:
+                        break
+                    ret, frame = self.stream.read()
+
                 if not ret or frame is None:
-                    logger.warning("استلام إطار فارغ، قد يكون البث انتهى")
-                    self.is_running = False
+                    if not ret:
+                        source_str = str(self.source)
+                        if source_str.startswith(("rtsp://", "http://", "https://")):
+                            logger.warning("فقدان الاتصال بالبث — محاولة إعادة الاتصال...")
+                            with self._stream_lock:
+                                if self.stream:
+                                    self.stream.release()
+                            for attempt in range(3):
+                                if self._stop_event.is_set():
+                                    break
+                                time.sleep(2)
+                                new_stream = cv2.VideoCapture(self.source)
+                                if new_stream.isOpened():
+                                    with self._stream_lock:
+                                        self.stream = new_stream
+                                    logger.info(f"تم إعادة الاتصال (محاولة {attempt + 1})")
+                                    break
+                                else:
+                                    new_stream.release()
+                            else:
+                                logger.error("فشل إعادة الاتصال بعد 3 محاولات")
+                                break
+                            continue
                     break
 
                 try:
@@ -100,7 +137,7 @@ class VideoIngestor:
                         pass
 
                 # التحكم بسرعة التشغيل (Pacing) لملفات الفيديو
-                if str(self.source).endswith((".mp4", ".avi", ".mkv")):
+                if is_video_file:
                     elapsed = time.perf_counter() - loop_start
                     sleep_time = frame_delay - elapsed
                     if sleep_time > 0:
@@ -113,23 +150,20 @@ class VideoIngestor:
 
     def stop(self) -> None:
         """إيقاف التقاط الفيديو"""
-        with self._lock:
-            if not self.is_running:
-                return
+        self._stop_event.set()
 
-            logger.info("جاري إيقاف التقاط الفيديو...")
-            self.is_running = False
-
+        with self._stream_lock:
             if self.stream:
                 self.stream.release()
                 self.stream = None
 
-            # تفريغ الطابور
-            while not self.raw_frame_queue.empty():
-                try:
-                    self.raw_frame_queue.get_nowait()
-                except queue.Empty:
-                    break
+        # إعطاء خيط القراءة فرصة للتوقف قبل تنظيف الطابور
+        time.sleep(0.15)
 
-            logger.info("تم إيقاف فيديو بنجاح.")
+        while not self.raw_frame_queue.empty():
+            try:
+                self.raw_frame_queue.get_nowait()
+            except queue.Empty:
+                break
 
+        logger.info("تم إيقاف فيديو بنجاح.")

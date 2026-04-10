@@ -58,7 +58,7 @@ class TestFullPipeline:
     def test_pipeline_with_line_zone(self, sample_frame_720p):
         """Pipeline مع خط عد"""
         # تعيين خط
-        self.line_manager.set_line((0, 360), (1280, 360))
+        self.line_manager.set_line("main", (0, 360), (1280, 360))
 
         # معالجة
         tensor, scale_info = self.preprocessor.preprocess(sample_frame_720p)
@@ -121,7 +121,7 @@ class TestResetFlow:
         manager = LineZoneManager()
 
         # تعيين خط
-        manager.set_line((0, 360), (1280, 360))
+        manager.set_line("main", (0, 360), (1280, 360))
 
         # معالجة إطار
         tensor, scale_info = preprocessor.preprocess(sample_frame_720p)
@@ -137,4 +137,4 @@ class TestResetFlow:
         assert counts["out_count"] == 0
 
         # الخط لا يزال موجود
-        assert manager.line_zone is not None
+        assert manager.has_line

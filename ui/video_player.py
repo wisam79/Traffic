@@ -18,6 +18,7 @@
 import time
 import cv2
 import numpy as np
+from collections import deque
 from typing import Dict, Optional
 
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
@@ -44,6 +45,7 @@ class ZoomableGraphicsView(QGraphicsView):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._user_zoomed = False
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """
@@ -65,6 +67,8 @@ class ZoomableGraphicsView(QGraphicsView):
         else:
             self.scale(zoom_out_factor, zoom_out_factor)
 
+        self._user_zoomed = True
+
         event.accept()
 
     def resizeEvent(self, event) -> None:
@@ -75,8 +79,7 @@ class ZoomableGraphicsView(QGraphicsView):
         """
         super().resizeEvent(event)
 
-        # محاولة ملاءة المشهد إذا كان هناك عنصر صورة
-        if self.scene() and self.scene().items():
+        if not self._user_zoomed and self.scene() and self.scene().items():
             for item in self.scene().items():
                 if hasattr(item, 'pixmap'):
                     self.fitInView(item, Qt.KeepAspectRatio)
@@ -119,11 +122,12 @@ class VideoDisplayManager:
 
         # عنصر الصورة - سيُحدث مع كل إطار
         self.pixmap_item: Optional[QGraphicsPixmapItem] = None
+        self._current_frame_data = None
 
         # ======================================================================
         # تتبع FPS
         # ======================================================================
-        self.frame_times = []  # أوقات آخر 60 إطار
+        self.frame_times = deque(maxlen=120)
         self.current_fps = 0
         self.total_frames = 0
 
@@ -156,9 +160,15 @@ class VideoDisplayManager:
         self.frame_times.append(now)
         self.total_frames += 1
 
-        # الاحتفاظ بآخر ثانية فقط
-        self.frame_times = [t for t in self.frame_times if now - t < 1.0]
-        self.current_fps = len(self.frame_times)
+        # حساب FPS الفعلي: عدد الإطارات في آخر ثانية
+        if len(self.frame_times) >= 2:
+            elapsed = self.frame_times[-1] - self.frame_times[0]
+            if elapsed > 0:
+                self.current_fps = int(len(self.frame_times) / elapsed)
+            else:
+                self.current_fps = 0
+        else:
+            self.current_fps = 0
 
         # ======================================================================
         # تحويل الإطار إلى QImage
@@ -168,6 +178,7 @@ class VideoDisplayManager:
         # OpenCV يستخدم BGR، لكن Qt يتوقع RGB
         # .copy() keeps data alive while QImage references it
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        self._current_frame_data = rgb_frame
 
         # الخطوة 2: الحصول على الأبعاد
         height, width, channel = rgb_frame.shape
@@ -193,9 +204,8 @@ class VideoDisplayManager:
         else:
             self.pixmap_item = self.scene.addPixmap(pixmap)
 
-        # ملاءة العرض (فقط إذا لم يكن المستخدم قد كبّر)
-        zoom_level = self.graphics_view.transform().m11()
-        if zoom_level < 1.01:  # تقريباً 1.0 (بدون تكبير)
+        # ملاءة العرض (فقط عند أول إطار أو بعد إعادة تعيين العرض)
+        if not self.graphics_view._user_zoomed:
             self.graphics_view.fitInView(
                 self.pixmap_item,
                 Qt.AspectRatioMode.KeepAspectRatio
@@ -208,6 +218,7 @@ class VideoDisplayManager:
         تُضاعف العرض بنسبة 120%
         """
         self.graphics_view.scale(1.2, 1.2)
+        self.graphics_view._user_zoomed = True
 
     def zoom_out(self) -> None:
         """
@@ -216,6 +227,7 @@ class VideoDisplayManager:
         تُقلص العرض بنسبة 80%
         """
         self.graphics_view.scale(0.8, 0.8)
+        self.graphics_view._user_zoomed = True
 
     def reset_view(self) -> None:
         """
@@ -224,11 +236,21 @@ class VideoDisplayManager:
         تُزيل التكبير وتُلائم الإطار بالكامل.
         """
         self.graphics_view.resetTransform()
+        self.graphics_view._user_zoomed = False
         if self.pixmap_item:
             self.graphics_view.fitInView(
                 self.pixmap_item,
                 Qt.AspectRatioMode.KeepAspectRatio
             )
+
+    def get_zoom_level(self) -> int:
+        """
+        الحصول على مستوى التكبير الحالي
+
+        المرجع (Returns):
+            نسبة التكبير كنسبة مئوية (100 = بدون تكبير)
+        """
+        return int(self.graphics_view.transform().m11() * 100)
 
     def get_stats(self) -> Dict:
         """

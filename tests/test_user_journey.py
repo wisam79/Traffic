@@ -97,7 +97,7 @@ def test_user_journey_end_to_end(qtbot, mock_opencv, mock_yolo):
     assert len(drawer.lines) == 1
     
     # تمرير الإحداثيات للنافذة لربطها بـ AI (يحاكي _on_line_defined)
-    window._on_line_defined((100, 200), (500, 200))
+    window._on_line_defined("test", (100, 200), (500, 200))
 
     # 4. بدء التحليل
     qtbot.mouseClick(window.control_panel.btn_start_stop, Qt.MouseButton.LeftButton)

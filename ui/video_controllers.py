@@ -170,6 +170,10 @@ class MediaRecorder:
         self.total_screenshots = 0
         self.total_recordings = 0
 
+    def __del__(self):
+        if self.is_recording:
+            self.stop_recording()
+
     def take_screenshot(self, frame: np.ndarray) -> str:
         """
         التقاط صورة من الإطار الحالي
@@ -345,9 +349,6 @@ class VideoController:
         self.adjuster = ImageAdjuster()
         self.recorder = MediaRecorder()
 
-        # مؤقت تتبع معدل الإطارات
-        self.frame_times = []
-
     def process_frame(self, frame: np.ndarray) -> np.ndarray:
         """
         معالجة إطار قبل العرض
@@ -355,7 +356,6 @@ class VideoController:
         الخطوات:
         1. تعديل الصورة (سطوع، تباين، تشبع)
         2. كتابة الإطار إذا كان التسجيل نشط
-        3. تتبع FPS
 
         المُعاملات (Args):
             frame: الإطار الأصلي
@@ -364,11 +364,6 @@ class VideoController:
             إطار مُعالج
         """
         try:
-            # تتبع FPS
-            now = time.time()
-            self.frame_times.append(now)
-            self.frame_times = [t for t in self.frame_times if now - t < 1.0]
-
             # تطبيق تعديل الصورة
             adjusted = self.adjuster.adjust(frame)
 
@@ -381,15 +376,6 @@ class VideoController:
         except Exception as e:
             logger.error(f"خطأ في معالجة الإطار: {e}")
             return frame
-
-    def get_current_fps(self) -> int:
-        """
-        الحصول على FPS الحالي
-
-        المرجع (Returns):
-            عدد الإطارات في الثانية الأخيرة
-        """
-        return len(self.frame_times)
 
     def reset_all(self) -> None:
         """

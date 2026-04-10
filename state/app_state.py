@@ -17,7 +17,6 @@
 
 import threading
 from typing import Optional, Tuple, Dict, Any
-from copy import deepcopy
 
 
 class AppState:
@@ -66,7 +65,7 @@ class AppState:
             Tuple من نقطتين أو None إذا لم يُحدد خط بعد
         """
         with self._lock:
-            return self._line_coordinates
+            return self._line_coordinates if self._line_coordinates else None
 
     def set_line_coordinates(
         self, coords: Optional[Tuple[Tuple[int, int], Tuple[int, int]]]
@@ -148,7 +147,7 @@ class AppState:
             نسخة من القاموس (ليست المرجع الأصلي) لمنع التعديل الخارجي
         """
         with self._lock:
-            return deepcopy(self._stats)
+            return self._stats.copy()
 
     def set_stats(self, stats: Dict[str, int]) -> None:
         """
@@ -158,7 +157,7 @@ class AppState:
             stats: قاموس جديد بالإحصائيات
         """
         with self._lock:
-            self._stats = deepcopy(stats)
+            self._stats = stats.copy()
 
     # ==========================================================================
     # دوال أبعاد الإطار - Frame Dimensions Methods

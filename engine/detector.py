@@ -61,6 +61,10 @@ class ObjectDetector:
         self.model_path = model_path
         self.confidence_threshold = confidence_threshold
 
+        # التحقق من وجود ملف النموذج قبل التحميل
+        if not os.path.exists(self.model_path):
+            raise FileNotFoundError(f"ملف النموذج غير موجود: {self.model_path}")
+
         # كائن جلسة ONNX
         self.session: Optional[ort.InferenceSession] = None
         self.input_name: Optional[str] = None
@@ -122,7 +126,7 @@ class ObjectDetector:
         يُنشئ إدخال وهمي ويفحص شكل المخرجات.
 
         التنسيقات المدعومة:
-        - YOLO26: (1, 300, 6)  → [cx, cy, w, h, conf, class_id]
+        - YOLO26: (1, 300, 6)  → [x1, y1, x2, y2, conf, class_id]
         - YOLOv8: (1, 84, 8400) → transposed, no obj_conf
         - YOLOv5: (1, 25200, 85) → [cx, cy, w, h, obj_conf, 80_classes]
         """
@@ -274,9 +278,14 @@ class ObjectDetector:
         y2 = boxes_filtered[:, 1] + boxes_filtered[:, 3] / 2
         xyxy = np.stack([x1, y1, x2, y2], axis=1)
 
+        # تحويل cx,cy,w,h → x,y,w,h لـ NMS
+        boxes_xywh = boxes_filtered.copy()
+        boxes_xywh[:, 0] = boxes_filtered[:, 0] - boxes_filtered[:, 2] / 2  # x = cx - w/2
+        boxes_xywh[:, 1] = boxes_filtered[:, 1] - boxes_filtered[:, 3] / 2  # y = cy - h/2
+
         # تطبيق NMS
         nms_result = cv2.dnn.NMSBoxes(
-            boxes_filtered.tolist(),
+            boxes_xywh.tolist(),
             confs_filtered.tolist(),
             self.confidence_threshold,  # score_threshold
             0.45  # nms_threshold (IoU)
@@ -335,9 +344,14 @@ class ObjectDetector:
         y2 = boxes_cxcywh[:, 1] + boxes_cxcywh[:, 3] / 2
         xyxy = np.stack([x1, y1, x2, y2], axis=1)
 
+        # تحويل cx,cy,w,h → x,y,w,h لـ NMS
+        boxes_xywh = boxes_cxcywh.copy()
+        boxes_xywh[:, 0] = boxes_cxcywh[:, 0] - boxes_cxcywh[:, 2] / 2  # x = cx - w/2
+        boxes_xywh[:, 1] = boxes_cxcywh[:, 1] - boxes_cxcywh[:, 3] / 2  # y = cy - h/2
+
         # تطبيق NMS (ترتيب المعاملات الصحيح)
         nms_result = cv2.dnn.NMSBoxes(
-            boxes_cxcywh.tolist(),
+            boxes_xywh.tolist(),
             confs.tolist(),
             self.confidence_threshold,  # score_threshold أولاً
             0.45  # nms_threshold (IoU) ثانياً

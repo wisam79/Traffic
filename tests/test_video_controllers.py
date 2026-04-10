@@ -200,16 +200,15 @@ class TestVideoControllerProcessFrame:
         assert isinstance(result, np.ndarray)
         assert result.shape == (480, 640, 3)
 
-    def test_process_tracks_fps(self):
-        """تتبع FPS"""
+    def test_process_returns_frame(self):
+        """معالجة الإطار تعيد إطار صالح"""
         vc = VideoController()
         frame = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
 
-        for _ in range(5):
-            vc.process_frame(frame)
+        result = vc.process_frame(frame)
 
-        fps = vc.get_current_fps()
-        assert fps > 0
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (100, 100, 3)
 
     def test_reset_all(self):
         """إعادة تعيين الكل"""
